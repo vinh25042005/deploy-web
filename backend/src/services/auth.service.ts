@@ -1,5 +1,5 @@
 // Auth Service
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
 import { RegisterInput, LoginInput } from '../types';
@@ -53,7 +53,7 @@ export class AuthService {
     return jwt.sign(
       { userId, role },
       process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: '7d' }
     );
   }
 }

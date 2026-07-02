@@ -26,8 +26,8 @@ export const updateProductSchema = z.object({
   description: z.string().min(1).optional(),
   price: z.number().positive().optional(),
   stock: z.number().int().nonnegative().optional(),
-  imageUrl: z.string().url().optional().nullable(),
-  categoryId: z.string().uuid().optional().nullable(),
+  imageUrl: z.string().url().optional().transform(v => v ?? undefined),
+  categoryId: z.string().uuid().optional().transform(v => v ?? undefined),
 });
 
 export const addToCartSchema = z.object({

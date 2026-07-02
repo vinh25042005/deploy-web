@@ -3,7 +3,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 interface ApiResponse<T = any> {
   status: string;
-  data?: T;
+  data: T;
   message?: string;
   errors?: { field: string; message: string }[];
 }
