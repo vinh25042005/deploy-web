@@ -1,34 +1,35 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+## BUILD ##
+FROM node:20 AS build
 
-WORKDIR /app
+WORKDIR /build
 
 COPY frontend/package*.json ./
 RUN npm ci
 
-# ─── Build arg cho API URL ───
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-COPY frontend/ .
-RUN chmod +x node_modules/.bin/* 2>/dev/null; npm run build
+COPY frontend/ ./
+RUN npm run build
 
-# Stage 2: Run
-FROM node:20-alpine AS runner
+## RUN ##
+FROM node:20-alpine
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+LABEL org.opencontainers.image.title="TechShop Frontend"
+LABEL org.opencontainers.image.version="1.0.0"
+
+RUN apk upgrade --no-cache && adduser -D frontend
+
+RUN npm update -g
 
 WORKDIR /app
+COPY --from=build --chown=frontend:frontend /build/ ./
 
-COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
-COPY --from=builder --chown=appuser:appgroup /app/.next ./.next
-COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
-
-USER appuser
+USER frontend
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000 || exit 1
 
 CMD ["npm", "run", "start"]

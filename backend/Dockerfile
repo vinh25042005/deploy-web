@@ -1,9 +1,9 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+## BUILD ##
+FROM node:20 AS build
 
-RUN apk add --no-cache openssl
+RUN apt-get update && apt-get install -y openssl
 
-WORKDIR /app
+WORKDIR /build
 
 COPY backend/package*.json ./
 COPY database ./database
@@ -11,27 +11,28 @@ COPY database ./database
 RUN npm ci
 RUN npx prisma generate --schema=./database/prisma/schema.prisma
 
-COPY backend/ .
-RUN chmod +x node_modules/.bin/* 2>/dev/null; npm run build
+COPY backend/ ./
+RUN npm run build
 
-# Stage 2: Run
-FROM node:20-alpine AS runner
+## RUN ##
+FROM node:20-alpine
+
+LABEL org.opencontainers.image.title="TechShop Backend"
+LABEL org.opencontainers.image.version="1.0.0"
+
+RUN apk upgrade --no-cache && adduser -D backend
 
 RUN apk add --no-cache openssl curl
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN npm update -g
 
 WORKDIR /app
+COPY --from=build --chown=backend:backend /build/ ./
 
-COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
-COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
-COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
-COPY --from=builder --chown=appuser:appgroup /app/database ./database
-
-USER appuser
+USER backend
 
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:3001/api/health || exit 1
 
 CMD ["node", "dist/index.js"]
