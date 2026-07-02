@@ -25,6 +25,8 @@ LABEL org.opencontainers.image.version="1.0.0"
 
 RUN apk upgrade --no-cache && adduser -D backend
 RUN apk add --no-cache openssl curl
+RUN npm install -g npm@latest
+
 
 WORKDIR /app
 COPY --from=build --chown=backend:backend /build/dist ./dist
