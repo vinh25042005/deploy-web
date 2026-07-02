@@ -1,4 +1,4 @@
-# ─── Static IP cho từng máy ───
+# Static IP
 resource "google_compute_address" "db" {
   name = "shop-db-ip"
 }

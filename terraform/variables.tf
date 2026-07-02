@@ -38,5 +38,5 @@ variable "backend_machine_type" {
 }
 
 variable "frontend_machine_type" {
-  default = "e2-micro"    # Next.js, RAM 1GB đủ
+  default = "e2-micro"    # Next.js
 }
