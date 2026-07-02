@@ -1,30 +1,113 @@
-# Deploy: Staging + Production
+# ─── Deploy: Staging + Production ───
 name: Deploy
 on:
   push:
     branches: [main]
     tags: ["v*.*.*"]
 
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  BACKEND_IP: 34.142.170.90
+  FRONTEND_IP: 34.87.84.121
+  DB_INTERNAL_IP: 10.148.0.3
+
 jobs:
-  # Staging
+  # ─── Staging (auto khi push main) ───
   deploy-staging:
     name: Deploy to Staging
     if: github.ref_type == 'branch'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: echo "✅ Deploy staging - image ready"
 
-  # Production (chỉ tag, cần approval)
+      - name: Auth GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Backend
+        run: |
+          gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a \
+            --command="
+              docker pull $REGISTRY/techshop-backend:latest &&
+              docker rm -f backend || true &&
+              docker run -d --name backend --restart always -p 3001:3001 \
+                -e DATABASE_URL=\"postgresql://postgres:postgres@$DB_INTERNAL_IP:5432/shopdb?schema=public\" \
+                -e JWT_SECRET=\"${{ secrets.JWT_SECRET }}\" \
+                -e JWT_EXPIRES_IN=7d \
+                -e PORT=3001 \
+                -e NODE_ENV=staging \
+                -e FRONTEND_URL=http://$FRONTEND_IP:3000 \
+                $REGISTRY/techshop-backend:latest
+            "
+
+      - name: Deploy Frontend
+        run: |
+          gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a \
+            --command="
+              docker pull $REGISTRY/techshop-frontend:latest &&
+              docker rm -f frontend || true &&
+              docker run -d --name frontend --restart always -p 3000:3000 \
+                $REGISTRY/techshop-frontend:latest
+            "
+
+      - name: Smoke Test
+        run: |
+          sleep 5
+          curl -f http://$BACKEND_IP:3001/api/health || exit 1
+
+  # ─── Production (tag v*, cần approval) ───
   deploy-production:
     name: Deploy to Production
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     environment:
       name: production
+      url: http://$FRONTEND_IP:3000
     steps:
       - uses: actions/checkout@v4
-      - run: echo "🚀 Deploy production ${{ github.ref_name }}"
+
+      - name: Auth GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Backend
+        run: |
+          gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a \
+            --command="
+              docker pull $REGISTRY/techshop-backend:${{ github.ref_name }} &&
+              docker rm -f backend || true &&
+              docker run -d --name backend --restart always -p 3001:3001 \
+                -e DATABASE_URL=\"postgresql://postgres:postgres@$DB_INTERNAL_IP:5432/shopdb?schema=public\" \
+                -e JWT_SECRET=\"${{ secrets.JWT_SECRET }}\" \
+                -e JWT_EXPIRES_IN=7d \
+                -e PORT=3001 \
+                -e NODE_ENV=production \
+                -e FRONTEND_URL=http://$FRONTEND_IP:3000 \
+                $REGISTRY/techshop-backend:${{ github.ref_name }}
+            "
+
+      - name: Deploy Frontend
+        run: |
+          gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a \
+            --command="
+              docker pull $REGISTRY/techshop-frontend:${{ github.ref_name }} &&
+              docker rm -f frontend || true &&
+              docker run -d --name frontend --restart always -p 3000:3000 \
+                $REGISTRY/techshop-frontend:${{ github.ref_name }}
+            "
+
+      - name: Smoke Test
+        run: |
+          sleep 5
+          curl -f http://$BACKEND_IP:3001/api/health || exit 1
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
