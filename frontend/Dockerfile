@@ -1,5 +1,5 @@
 ## BUILD ##
-FROM node:20 AS build
+FROM node:24 AS build
 
 WORKDIR /build
 
@@ -16,7 +16,7 @@ RUN npm run build
 RUN npm prune --production
 
 ## RUN ##
-FROM node:20-alpine
+FROM node:24-alpine
 
 LABEL org.opencontainers.image.title="TechShop Frontend"
 LABEL org.opencontainers.image.version="1.0.0"
