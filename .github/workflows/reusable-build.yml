@@ -1,0 +1,31 @@
+# Build & push Docker image
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+        description: "Service name (backend/frontend)"
+      dockerfile:
+        required: true
+        type: string
+        description: "Path to Dockerfile"
+      image_tag:
+        required: true
+        type: string
+        description: "Docker image tag"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build & tag
+        run: |
+          docker build \
+            -t ${{ inputs.service }}:${{ inputs.image_tag }} \
+            -t ${{ inputs.service }}:latest \
+            -f ${{ inputs.dockerfile }} \
+            .

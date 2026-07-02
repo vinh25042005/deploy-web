@@ -1,0 +1,70 @@
+# ─── CI: Type check + Lint ───
+name: CI
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Matrix: backend type-check ───
+  backend-typecheck:
+    name: "Backend type-check (Node ${{ matrix.node }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+        os: [ubuntu-22.04, ubuntu-24.04]
+        exclude:
+          - { node: 18, os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  # ─── Matrix: frontend type-check ───
+  frontend-typecheck:
+    name: "Frontend type-check (Node ${{ matrix.node }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+        os: [ubuntu-22.04, ubuntu-24.04]
+        exclude:
+          - { node: 18, os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  # ─── Docker build test ───
+  docker-build:
+    name: Docker build test
+    needs: [backend-typecheck, frontend-typecheck]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t backend-test -f backend/Dockerfile .
+
+      - name: Build frontend image
+        run: docker build -t frontend-test -f frontend/Dockerfile .
