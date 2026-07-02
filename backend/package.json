@@ -11,7 +11,12 @@
     "db:seed": "tsx ../database/seed.ts",
     "db:studio": "prisma studio --schema=../database/prisma/schema.prisma",
     "lint": "eslint src/",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/src"]
   },
   "prisma": {
     "schema": "../database/prisma/schema.prisma",
@@ -31,15 +36,21 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.2",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.6",
+    "eslint": "^10.6.0",
+    "jest": "^30.4.2",
     "prisma": "^5.15.0",
+    "ts-jest": "^29.4.11",
     "tsx": "^4.15.1",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.62.1"
   }
 }

@@ -1,4 +1,4 @@
-# ─── CI: Type check + Lint ───
+# ─── CI: Lint → Test → Build → Push ───
 name: CI
 on:
   push:
@@ -6,65 +6,83 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  # ─── Matrix: backend type-check ───
-  backend-typecheck:
-    name: "Backend type-check (Node ${{ matrix.node }})"
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [18, 20, 22]
-        os: [ubuntu-22.04, ubuntu-24.04]
-        exclude:
-          - { node: 18, os: ubuntu-24.04 }
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: backend
+  # ─── Lint ───
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: '20'
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
+        working-directory: backend
+      - run: npm run lint
+        working-directory: backend
 
-  # ─── Matrix: frontend type-check ───
-  frontend-typecheck:
-    name: "Frontend type-check (Node ${{ matrix.node }})"
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [18, 20, 22]
-        os: [ubuntu-22.04, ubuntu-24.04]
-        exclude:
-          - { node: 18, os: ubuntu-24.04 }
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: frontend
+  # ─── Test ───
+  test:
+    name: Test
+    needs: lint
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: '20'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: backend/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
 
-  # ─── Docker build test ───
-  docker-build:
-    name: Docker build test
-    needs: [backend-typecheck, frontend-typecheck]
+  # ─── Build & Push (chỉ main) ───
+  build-and-push:
+    name: Build & Push to GHCR
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build backend image
-        run: docker build -t backend-test -f backend/Dockerfile .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build frontend image
-        run: docker build -t frontend-test -f frontend/Dockerfile .
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/techshop-backend:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/techshop-frontend:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
