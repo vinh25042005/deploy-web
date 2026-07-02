@@ -7,7 +7,7 @@ COPY frontend/package*.json ./
 RUN npm ci
 
 COPY frontend/ .
-RUN npm run build
+RUN chmod +x node_modules/.bin/* 2>/dev/null; npm run build
 
 # Stage 2: Run
 FROM node:20-alpine AS runner

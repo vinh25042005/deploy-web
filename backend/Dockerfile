@@ -12,7 +12,7 @@ RUN npm ci
 RUN npx prisma generate --schema=./database/prisma/schema.prisma
 
 COPY backend/ .
-RUN npm run build
+RUN chmod +x node_modules/.bin/* 2>/dev/null; npm run build
 
 # Stage 2: Run
 FROM node:20-alpine AS runner

@@ -6,3 +6,6 @@ dist
 .next
 *.log
 *.md
+**/node_modules
+**/.next
+**/dist
