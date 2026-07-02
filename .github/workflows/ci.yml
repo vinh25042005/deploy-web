@@ -80,6 +80,8 @@ jobs:
         with:
           context: .
           file: frontend/Dockerfile
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://34.142.170.90:3001/api
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:sha-${{ github.sha }}
