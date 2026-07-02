@@ -1,5 +1,5 @@
 # ─── Deploy: Staging + Production ───
-name: Deploy
+name: Deploy to GCP
 on:
   workflow_run:
     workflows: ["CI"]
@@ -33,8 +33,12 @@ jobs:
         run: |
           gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a \
             --command="
-              docker pull $REGISTRY/techshop-backend:latest &&
-              docker rm -f backend || true &&
+              docker rm -f backend 2>/dev/null;
+              for i in {1..3}; do
+                docker pull $REGISTRY/techshop-backend:latest && break;
+                echo 'Retry pull... (\$i/3)';
+                sleep 3;
+              done &&
               docker run -d --name backend --restart always -p 3001:3001 \
                 -e DATABASE_URL=\"postgresql://postgres:postgres@$DB_INTERNAL_IP:5432/shopdb?schema=public\" \
                 -e JWT_SECRET=\"${{ secrets.JWT_SECRET }}\" \
@@ -49,8 +53,8 @@ jobs:
         run: |
           gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a \
             --command="
+              docker rm -f frontend 2>/dev/null;
               docker pull $REGISTRY/techshop-frontend:latest &&
-              docker rm -f frontend || true &&
               docker run -d --name frontend --restart always -p 3000:3000 \
                 $REGISTRY/techshop-frontend:latest
             "
