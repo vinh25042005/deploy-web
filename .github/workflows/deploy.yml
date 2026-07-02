@@ -56,8 +56,13 @@ jobs:
 
       - name: Smoke Test
         run: |
-          sleep 5
-          curl -f http://$BACKEND_IP:3001/api/health || exit 1
+          for i in {1..30}; do
+            curl -sf http://$BACKEND_IP:3001/api/health && exit 0
+            echo "⏳ Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "❌ Backend not ready after 60s"
+          exit 1
 
   # ─── Production (tag v*, cần approval) ───
   deploy-production:
@@ -106,8 +111,13 @@ jobs:
 
       - name: Smoke Test
         run: |
-          sleep 5
-          curl -f http://$BACKEND_IP:3001/api/health || exit 1
+          for i in {1..30}; do
+            curl -sf http://$BACKEND_IP:3001/api/health && exit 0
+            echo "⏳ Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "❌ Backend not ready after 60s"
+          exit 1
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
