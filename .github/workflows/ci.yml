@@ -96,6 +96,17 @@ jobs:
           cache-to: |
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache,mode=max
 
+
+      - name: Scan backend with Trivy
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
+          format: sarif
+          output: trivy-backend.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
@@ -111,3 +122,20 @@ jobs:
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-frontend:cache
           cache-to: |
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-frontend:cache,mode=max
+
+
+      - name: Scan frontend with Trivy
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
+          format: sarif
+          output: trivy-frontend.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+
+      - name: Upload Trivy reports
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-*.sarif   
