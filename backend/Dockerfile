@@ -14,6 +14,9 @@ RUN npx prisma generate --schema=./database/prisma/schema.prisma
 COPY backend/ ./
 RUN npm run build
 
+# ─── Dọn dev dependencies, giữ lại production modules ───
+RUN npm prune --production
+
 ## RUN ##
 FROM node:20-alpine
 
@@ -21,12 +24,13 @@ LABEL org.opencontainers.image.title="TechShop Backend"
 LABEL org.opencontainers.image.version="1.0.0"
 
 RUN apk upgrade --no-cache && adduser -D backend
-
 RUN apk add --no-cache openssl curl
-RUN npm update -g
 
 WORKDIR /app
-COPY --from=build --chown=backend:backend /build/ ./
+COPY --from=build --chown=backend:backend /build/dist ./dist
+COPY --from=build --chown=backend:backend /build/node_modules ./node_modules
+COPY --from=build --chown=backend:backend /build/package*.json ./
+COPY --from=build --chown=backend:backend /build/database ./database
 
 USER backend
 

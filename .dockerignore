@@ -9,3 +9,25 @@ dist
 **/node_modules
 **/.next
 **/dist
+
+# Terraform
+.terraform
+*.tfstate
+*.tfstate.backup
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+build
+out
+coverage
+
+# GitHub
+.github

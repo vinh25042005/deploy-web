@@ -12,6 +12,9 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY frontend/ ./
 RUN npm run build
 
+# ─── Dọn dev dependencies (tailwind, postcss, typescript...) ───
+RUN npm prune --production
+
 ## RUN ##
 FROM node:20-alpine
 
@@ -20,10 +23,10 @@ LABEL org.opencontainers.image.version="1.0.0"
 
 RUN apk upgrade --no-cache && adduser -D frontend
 
-RUN npm update -g
-
 WORKDIR /app
-COPY --from=build --chown=frontend:frontend /build/ ./
+COPY --from=build --chown=frontend:frontend /build/package*.json ./
+COPY --from=build --chown=frontend:frontend /build/.next ./.next
+COPY --from=build --chown=frontend:frontend /build/node_modules ./node_modules
 
 USER frontend
 

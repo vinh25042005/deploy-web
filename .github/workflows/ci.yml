@@ -6,43 +6,62 @@ on:
   pull_request:
     branches: [main]
 
+# ─── Hủy build cũ nếu push mới ───
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
 
 jobs:
-  # ─── Lint ───
+  # ─── Lint backend + frontend ───
   lint:
     name: Lint
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: backend/package-lock.json
+
       - run: npm ci
         working-directory: backend
       - run: npm run lint
         working-directory: backend
 
-  # ─── Test ───
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run lint || true
+        working-directory: frontend
+
+  # ─── Test backend + type-check frontend ───
   test:
     name: Test
     needs: lint
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: backend/package-lock.json
+
       - run: npm ci
         working-directory: backend
       - run: npm test
         working-directory: backend
+
+      - run: npm ci
+        working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend
 
   # ─── Build & Push (chỉ main) ───
   build-and-push:
@@ -72,7 +91,9 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/techshop-backend:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
-          cache-from: type=gha
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
+            type=gha,mode=max
           cache-to: type=gha,mode=max
 
       - name: Build & push frontend
@@ -81,10 +102,12 @@ jobs:
           context: .
           file: frontend/Dockerfile
           build-args: |
-            NEXT_PUBLIC_API_URL=http://34.142.170.90:3001/api
+            NEXT_PUBLIC_API_URL=${{ vars.BACKEND_API_URL || 'http://localhost:3001/api' }}
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
-          cache-from: type=gha
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
+            type=gha,mode=max
           cache-to: type=gha,mode=max
