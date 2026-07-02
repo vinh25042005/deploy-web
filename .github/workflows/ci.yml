@@ -92,9 +92,9 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/techshop-backend:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
           cache-from: |
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
-            type=gha,mode=max
-          cache-to: type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache
+          cache-to: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache,mode=max
 
       - name: Build & push frontend
         uses: docker/build-push-action@v6
@@ -108,6 +108,6 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
           cache-from: |
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
-            type=gha,mode=max
-          cache-to: type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache
+          cache-to: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache,mode=max
