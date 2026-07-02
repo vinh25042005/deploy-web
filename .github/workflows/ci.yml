@@ -98,7 +98,7 @@ jobs:
 
 
       - name: Scan backend with Trivy
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/techshop-backend:latest
           format: sarif
@@ -125,7 +125,7 @@ jobs:
 
 
       - name: Scan frontend with Trivy
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
           format: sarif
