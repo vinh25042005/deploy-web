@@ -1,7 +1,8 @@
 ## BUILD ##
-FROM node:24 AS build
+FROM node:24-alpine AS build
 
-RUN apt-get update && apt-get install -y openssl
+# Đã chuyển sang dùng apk của Alpine thay vì apt-get
+RUN apk add --no-cache openssl
 
 WORKDIR /build
 
