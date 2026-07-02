@@ -1,7 +1,6 @@
 ## BUILD ##
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 
-# Đã chuyển sang dùng apk của Alpine thay vì apt-get
 RUN apk add --no-cache openssl
 
 WORKDIR /build
@@ -19,7 +18,7 @@ RUN npm run build
 RUN npm prune --production
 
 ## RUN ##
-FROM node:24-alpine
+FROM node:26-alpine
 
 LABEL org.opencontainers.image.title="TechShop Backend"
 LABEL org.opencontainers.image.version="1.0.0"
