@@ -22,7 +22,6 @@ WORKDIR /app
 
 COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
 COPY --from=builder --chown=appuser:appgroup /app/.next ./.next
-COPY --from=builder --chown=appuser:appgroup /app/public ./public
 COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 
 USER appuser
