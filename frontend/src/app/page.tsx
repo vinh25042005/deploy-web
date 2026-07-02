@@ -68,7 +68,7 @@ export default function HomePage() {
       {/* Products Grid */}
       <div className="max-w-7xl mx-auto px-4 py-12">
         <h2 className="text-2xl font-bold text-gray-800 mb-8">
-          📱 Sản phẩm nổi bật deploy thử 123
+          📱 Test deploy ko hardcode
         </h2>
 
         {loading ? (

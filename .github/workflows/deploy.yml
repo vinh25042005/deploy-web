@@ -8,9 +8,9 @@ on:
 
 env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}
-  BACKEND_IP: 34.142.170.90
-  FRONTEND_IP: 34.87.84.121
-  DB_INTERNAL_IP: 10.148.0.3
+  BACKEND_IP: ${{ vars.BACKEND_IP || '34.142.170.90' }}
+  FRONTEND_IP: ${{ vars.FRONTEND_IP || '34.87.84.121' }}
+  DB_INTERNAL_IP: ${{ vars.DB_INTERNAL_IP || '10.148.0.3' }}
 
 jobs:
   # ─── Staging (auto khi push main) ───
