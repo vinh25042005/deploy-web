@@ -108,6 +108,6 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/techshop-frontend:latest
           cache-from: |
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-frontend:cache
           cache-to: |
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-backend:cache,mode=max
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/techshop-frontend:cache,mode=max
