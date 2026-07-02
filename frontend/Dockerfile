@@ -6,6 +6,10 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
 
+# ─── Build arg cho API URL ───
+ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 COPY frontend/ .
 RUN chmod +x node_modules/.bin/* 2>/dev/null; npm run build
 
