@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  REGISTRY: asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop
   BACKEND_IP: ${{ vars.BACKEND_IP || '34.142.170.90' }}
   FRONTEND_IP: ${{ vars.FRONTEND_IP || '34.87.84.121' }}
   DB_INTERNAL_IP: ${{ vars.DB_INTERNAL_IP || '10.148.0.3' }}
