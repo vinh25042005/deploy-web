@@ -41,8 +41,10 @@ resource "google_compute_firewall" "frontend" {
   target_tags   = ["shop-frontend"]
 }
 
-resource "google_compute_firewall" "ssh" {
-  name    = "allow-ssh"
+# IAP SSH Tunnel (thay thế mở port 22 ra internet)
+# Chỉ dải IP của Google IAP được phép SSH vào VM
+resource "google_compute_firewall" "allow-iap-ssh" {
+  name    = "allow-iap-ssh"
   network = "default"
 
   allow {
@@ -50,6 +52,6 @@ resource "google_compute_firewall" "ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = ["35.235.240.0/20"]
   target_tags   = ["shop"]
 }

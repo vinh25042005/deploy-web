@@ -28,6 +28,25 @@ variable "ssh_user" {
   default     = "deploy"
 }
 
+# ─── Database credentials  ───
+variable "db_user" {
+  description = "PostgreSQL user"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_password" {
+  description = "PostgreSQL password"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_name" {
+  description = "PostgreSQL database name"
+  type        = string
+  default     = "shopdb"
+}
+
 # ─── Per-VM machine types ───
 variable "db_machine_type" {
   default = "e2-small"    # Postgres

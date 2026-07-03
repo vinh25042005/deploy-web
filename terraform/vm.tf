@@ -37,9 +37,9 @@ resource "google_compute_instance" "db" {
     systemctl enable docker
     docker run -d --name postgres \
       --restart always \
-      -e POSTGRES_USER=postgres \
-      -e POSTGRES_PASSWORD=postgres \
-      -e POSTGRES_DB=shopdb \
+      -e POSTGRES_USER=${var.db_user} \
+      -e POSTGRES_PASSWORD=${var.db_password} \
+      -e POSTGRES_DB=${var.db_name} \
       -p 5432:5432 \
       -v /data/postgres:/var/lib/postgresql/data \
       postgres:16-alpine
