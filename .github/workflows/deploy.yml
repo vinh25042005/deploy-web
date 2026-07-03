@@ -7,10 +7,10 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop
-  BACKEND_IP: ${{ vars.BACKEND_IP || '34.142.170.90' }}
-  FRONTEND_IP: ${{ vars.FRONTEND_IP || '34.87.84.121' }}
-  DB_INTERNAL_IP: ${{ vars.DB_INTERNAL_IP || '10.148.0.3' }}
+  REGISTRY: asia-southeast1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID || 'techshop-prod-2026' }}/techshop
+  BACKEND_IP: ${{ vars.BACKEND_IP }}
+  FRONTEND_IP: ${{ vars.FRONTEND_IP }}
+  DB_INTERNAL_IP: ${{ vars.DB_INTERNAL_IP }}
 
 jobs:
   # ─── Staging (auto khi push main) ───
@@ -31,7 +31,7 @@ jobs:
 
       - name: Deploy Backend
         run: |
-          gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a \
+          gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a --tunnel-through-iap \
             --command="
               docker rm -f backend 2>/dev/null;
               for i in {1..3}; do
@@ -40,7 +40,7 @@ jobs:
                 sleep 3;
               done &&
               docker run -d --name backend --restart always -p 3001:3001 \
-                -e DATABASE_URL=\"postgresql://postgres:postgres@$DB_INTERNAL_IP:5432/shopdb?schema=public\" \
+                -e DATABASE_URL=\"postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@$DB_INTERNAL_IP:5432/${{ secrets.DB_NAME }}?schema=public\" \
                 -e JWT_SECRET=\"${{ secrets.JWT_SECRET }}\" \
                 -e JWT_EXPIRES_IN=7d \
                 -e PORT=3001 \
@@ -52,7 +52,7 @@ jobs:
 
       - name: Deploy Frontend
         run: |
-          gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a \
+          gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a --tunnel-through-iap \
             --command="
               docker rm -f frontend 2>/dev/null;
               docker pull $REGISTRY/frontend:latest &&
@@ -92,30 +92,30 @@ jobs:
 
       - name: Deploy Backend
         run: |
-          gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a \
+          gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a --tunnel-through-iap \
             --command="
               docker pull $REGISTRY/backend:${{ github.ref_name }} &&
               docker rm -f backend || true &&
               docker run -d --name backend --restart always -p 3001:3001 \
-                -e DATABASE_URL=\"postgresql://postgres:postgres@$DB_INTERNAL_IP:5432/shopdb?schema=public\" \
+                -e DATABASE_URL=\"postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@$DB_INTERNAL_IP:5432/${{ secrets.DB_NAME }}?schema=public\" \
                 -e JWT_SECRET=\"${{ secrets.JWT_SECRET }}\" \
                 -e JWT_EXPIRES_IN=7d \
                 -e PORT=3001 \
                 -e NODE_ENV=production \
                 -e FRONTEND_URL=http://$FRONTEND_IP:3000 \
                 $REGISTRY/backend:${{ github.ref_name }};
-              docker image prune -af --filter until=24h
+              docker image prune -af 
             "
 
       - name: Deploy Frontend
         run: |
-          gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a \
+          gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a --tunnel-through-iap \
             --command="
               docker pull $REGISTRY/frontend:${{ github.ref_name }} &&
               docker rm -f frontend || true &&
               docker run -d --name frontend --restart always -p 3000:3000 \
                 $REGISTRY/frontend:${{ github.ref_name }};
-              docker image prune -af --filter until=24h
+              docker image prune -af 
             "
 
       - name: Smoke Test

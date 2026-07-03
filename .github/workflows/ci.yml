@@ -16,7 +16,7 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop
+  REGISTRY: asia-southeast1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID || 'techshop-prod-2026' }}/techshop
 
 jobs:
   # ─── Lint backend + frontend ───
