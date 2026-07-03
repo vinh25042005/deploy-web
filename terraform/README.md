@@ -1,7 +1,5 @@
 # 🏗️ Terraform — TechShop Infrastructure
 
-Cơ sở hạ tầng GCP cho ứng dụng e-commerce TechShop.
-
 ## Kiến trúc
 
 ```
@@ -46,7 +44,6 @@ terraform output
 State lưu trên **GCS bucket** `tfstate-techshop-xxxxx`:
 - Object versioning: khôi phục state cũ nếu lỗi
 - Built-in locking: tránh conflict khi team cùng apply
-- Encrypted at rest
 
 ## File structure
 
