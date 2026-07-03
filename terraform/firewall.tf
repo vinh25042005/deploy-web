@@ -32,7 +32,8 @@ resource "google_compute_firewall" "db" {
   target_tags = ["shop-db"]
 }
 
-# Backend API: public
+# Backend API: chỉ cho frontend nội bộ (Next.js proxy /api/*)
+# Backend không mở port ra Internet → bảo mật hơn
 resource "google_compute_firewall" "backend" {
   name    = "allow-backend"
   network = google_compute_network.main.self_link
@@ -42,8 +43,8 @@ resource "google_compute_firewall" "backend" {
     ports    = ["3001"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["shop-backend"]
+  source_tags = ["shop-frontend"]
+  target_tags = ["shop-backend"]
 }
 
 # Frontend: public

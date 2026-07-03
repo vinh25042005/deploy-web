@@ -3,10 +3,6 @@ resource "google_compute_address" "db" {
   name = "shop-db-ip"
 }
 
-resource "google_compute_address" "backend" {
-  name = "shop-backend-ip"
-}
-
 resource "google_compute_address" "frontend" {
   name = "shop-frontend-ip"
 }
@@ -87,9 +83,8 @@ resource "google_compute_instance" "backend" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_a.self_link
-    access_config {
-      nat_ip = google_compute_address.backend.address
-    }
+    # Không có access_config → backend chỉ có internal IP, an toàn hơn
+    # Frontend proxy /api/* sang backend qua internal network
   }
 
   metadata_startup_script = <<-EOF
