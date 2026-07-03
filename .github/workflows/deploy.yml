@@ -8,7 +8,6 @@ on:
 
 env:
   REGISTRY: asia-southeast1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID || 'techshop-prod-2026' }}/techshop
-  BACKEND_IP: ${{ vars.BACKEND_IP }}
   FRONTEND_IP: ${{ vars.FRONTEND_IP }}
   DB_INTERNAL_IP: ${{ vars.DB_INTERNAL_IP }}
 
@@ -64,7 +63,7 @@ jobs:
       - name: Smoke Test
         run: |
           for i in {1..30}; do
-            curl -sf http://$BACKEND_IP:3001/api/health && exit 0
+            gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a --tunnel-through-iap --command="curl -sf http://localhost:3001/api/health" && exit 0
             echo "⏳ Waiting... ($i/30)"
             sleep 2
           done
@@ -121,7 +120,7 @@ jobs:
       - name: Smoke Test
         run: |
           for i in {1..30}; do
-            curl -sf http://$BACKEND_IP:3001/api/health && exit 0
+            gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a --tunnel-through-iap --command="curl -sf http://localhost:3001/api/health" && exit 0
             echo "⏳ Waiting... ($i/30)"
             sleep 2
           done

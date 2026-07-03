@@ -152,7 +152,7 @@ jobs:
           context: .
           file: frontend/Dockerfile
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.BACKEND_API_URL || 'http://localhost:3001/api' }}
+            BACKEND_INTERNAL_URL=${{ vars.BACKEND_INTERNAL_URL || 'http://localhost:3001' }}
           push: true
           tags: |
             ${{ env.REGISTRY }}/frontend:sha-${{ github.sha }}
