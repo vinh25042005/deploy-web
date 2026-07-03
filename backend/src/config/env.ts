@@ -2,17 +2,16 @@
 // App sẽ crash ngay khi khởi động nếu thiếu biến bắt buộc,
 // thay vì âm thầm dùng fallback không an toàn.
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('❌ FATAL: JWT_SECRET environment variable is not set');
-  process.exit(1);
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`❌ FATAL: ${name} environment variable is not set`);
+  }
+  return value;
 }
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  console.error('❌ FATAL: DATABASE_URL environment variable is not set');
-  process.exit(1);
-}
+const JWT_SECRET = requireEnv('JWT_SECRET');
+const DATABASE_URL = requireEnv('DATABASE_URL');
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const NODE_ENV = process.env.NODE_ENV || 'development';
