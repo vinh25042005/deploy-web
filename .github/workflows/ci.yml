@@ -21,14 +21,21 @@ env:
 jobs:
   # ─── Lint backend + frontend ───
   lint:
-    name: Lint
-    runs-on: ubuntu-22.04
+    name: "Lint (Node ${{ matrix.node }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+        os: [ubuntu-22.04, ubuntu-24.04]
+        exclude:
+          - { node: 18, os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -44,15 +51,22 @@ jobs:
 
   # ─── Test backend + type-check frontend ───
   test:
-    name: Test
+    name: "Test (Node ${{ matrix.node }})"
     needs: lint
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+        os: [ubuntu-22.04, ubuntu-24.04]
+        exclude:
+          - { node: 18, os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
