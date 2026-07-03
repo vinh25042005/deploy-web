@@ -39,6 +39,7 @@ coverage/
 *.tsbuildinfo
 next-env.d.ts
 1.md
+screenshots/
 
 # Terraform
 .terraform/
