@@ -96,6 +96,7 @@ resource "google_compute_instance" "backend" {
     #!/bin/bash
     apt-get update && apt-get install -y docker.io
     systemctl enable docker
+    usermod -aG docker deploy
   EOF
 
   tags = ["shop-backend", "shop"]
@@ -125,6 +126,7 @@ resource "google_compute_instance" "frontend" {
     #!/bin/bash
     apt-get update && apt-get install -y docker.io
     systemctl enable docker
+    usermod -aG docker deploy
   EOF
 
   tags = ["shop-frontend", "shop"]
