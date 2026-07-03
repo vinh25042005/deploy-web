@@ -1,5 +1,6 @@
 // API Client - Centralized HTTP requests
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+// Dùng relative path — Next.js rewrites tự proxy /api/* sang backend nội bộ
+const API_URL = '/api';
 
 interface ApiResponse<T = any> {
   status: string;

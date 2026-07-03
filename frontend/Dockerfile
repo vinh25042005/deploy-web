@@ -9,8 +9,9 @@ WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm ci
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Backend internal URL để Next.js rewrites proxy /api/*
+ARG BACKEND_INTERNAL_URL=http://localhost:3001
+ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
 
 COPY frontend/ ./
 RUN npm run build
