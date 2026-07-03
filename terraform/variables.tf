@@ -22,6 +22,12 @@ variable "vm_disk_size" {
   default     = 10
 }
 
+variable "db_data_disk_size" {
+  description = "Persistent disk GB for PostgreSQL data"
+  type        = number
+  default     = 20
+}
+
 variable "ssh_user" {
   description = "SSH username for VM"
   type        = string

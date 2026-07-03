@@ -11,6 +11,14 @@ resource "google_compute_address" "frontend" {
   name = "shop-frontend-ip"
 }
 
+# ─── Persistent Disk cho PostgreSQL data ───
+# Tồn tại độc lập với VM, không bị xóa khi rebuild VM
+resource "google_compute_disk" "db_data" {
+  name = "shop-db-data"
+  size = var.db_data_disk_size
+  zone = var.zone
+}
+
 # ─── Database VM ───
 resource "google_compute_instance" "db" {
   name         = "shop-db"
@@ -24,6 +32,12 @@ resource "google_compute_instance" "db" {
     }
   }
 
+  # Gắn persistent disk riêng cho data PostgreSQL
+  attached_disk {
+    source      = google_compute_disk.db_data.id
+    device_name = "db-data"
+  }
+
   network_interface {
     network = "default"
     access_config {
@@ -35,6 +49,16 @@ resource "google_compute_instance" "db" {
     #!/bin/bash
     apt-get update && apt-get install -y docker.io docker-compose
     systemctl enable docker
+
+    # Mount persistent data disk
+    DATA_DISK=/dev/disk/by-id/google-db-data
+    if ! blkid $DATA_DISK 2>/dev/null; then
+      mkfs.ext4 -F $DATA_DISK
+    fi
+    mkdir -p /data
+    mount $DATA_DISK /data
+    echo "$DATA_DISK /data ext4 defaults 0 0" >> /etc/fstab
+
     docker run -d --name postgres \
       --restart always \
       -e POSTGRES_USER=${var.db_user} \
