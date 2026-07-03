@@ -39,7 +39,7 @@ resource "google_compute_instance" "db" {
   }
 
   network_interface {
-    network = "default"
+    subnetwork = google_compute_subnetwork.subnet_a.self_link
     access_config {
       nat_ip = google_compute_address.db.address
     }
@@ -86,7 +86,7 @@ resource "google_compute_instance" "backend" {
   }
 
   network_interface {
-    network = "default"
+    subnetwork = google_compute_subnetwork.subnet_a.self_link
     access_config {
       nat_ip = google_compute_address.backend.address
     }
@@ -115,7 +115,7 @@ resource "google_compute_instance" "frontend" {
   }
 
   network_interface {
-    network = "default"
+    subnetwork = google_compute_subnetwork.subnet_a.self_link
     access_config {
       nat_ip = google_compute_address.frontend.address
     }

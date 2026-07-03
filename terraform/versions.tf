@@ -1,4 +1,4 @@
-# ─── Provider + Project Config ───
+# ─── Terraform + Provider Versions ───
 terraform {
   required_version = ">= 1.5"
   required_providers {

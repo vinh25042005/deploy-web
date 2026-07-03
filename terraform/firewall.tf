@@ -1,8 +1,27 @@
+# ─── Firewall Rules (gắn vào VPC riêng) ───
+
+# Cho phép giao tiếp nội bộ giữa các VM trong VPC
+resource "google_compute_firewall" "allow-internal" {
+  name    = "allow-internal"
+  network = google_compute_network.main.self_link
+
+  allow {
+    protocol = "tcp"
+  }
+  allow {
+    protocol = "udp"
+  }
+  allow {
+    protocol = "icmp"
+  }
+
+  source_ranges = [var.subnet_a_cidr, var.subnet_b_cidr]
+}
 
 # Database: chỉ cho backend kết nối
 resource "google_compute_firewall" "db" {
   name    = "allow-postgres"
-  network = "default"
+  network = google_compute_network.main.self_link
 
   allow {
     protocol = "tcp"
@@ -13,10 +32,10 @@ resource "google_compute_firewall" "db" {
   target_tags = ["shop-db"]
 }
 
-# Backend API
+# Backend API: public
 resource "google_compute_firewall" "backend" {
   name    = "allow-backend"
-  network = "default"
+  network = google_compute_network.main.self_link
 
   allow {
     protocol = "tcp"
@@ -27,10 +46,10 @@ resource "google_compute_firewall" "backend" {
   target_tags   = ["shop-backend"]
 }
 
-# Frontend
+# Frontend: public
 resource "google_compute_firewall" "frontend" {
   name    = "allow-frontend"
-  network = "default"
+  network = google_compute_network.main.self_link
 
   allow {
     protocol = "tcp"
@@ -41,11 +60,10 @@ resource "google_compute_firewall" "frontend" {
   target_tags   = ["shop-frontend"]
 }
 
-# IAP SSH Tunnel (thay thế mở port 22 ra internet)
-# Chỉ dải IP của Google IAP được phép SSH vào VM
+# IAP SSH Tunnel
 resource "google_compute_firewall" "allow-iap-ssh" {
   name    = "allow-iap-ssh"
-  network = "default"
+  network = google_compute_network.main.self_link
 
   allow {
     protocol = "tcp"
@@ -54,4 +72,18 @@ resource "google_compute_firewall" "allow-iap-ssh" {
 
   source_ranges = ["35.235.240.0/20"]
   target_tags   = ["shop"]
+}
+
+# Health check từ Google Cloud (Load Balancer, Managed Instance Group...)
+resource "google_compute_firewall" "allow-health-check" {
+  name    = "allow-health-check"
+  network = google_compute_network.main.self_link
+
+  allow {
+    protocol = "tcp"
+    ports    = ["3000", "3001"]
+  }
+
+  source_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
+  target_tags   = ["shop-backend", "shop-frontend"]
 }

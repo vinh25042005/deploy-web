@@ -1,3 +1,20 @@
+# ─── VPC ─────────────────────────────────
+output "vpc_name" {
+  value       = google_compute_network.main.name
+  description = "Tên VPC"
+}
+
+output "vpc_self_link" {
+  value       = google_compute_network.main.self_link
+  description = "VPC self link"
+}
+
+output "subnet_a_cidr" {
+  value       = google_compute_subnetwork.subnet_a.ip_cidr_range
+  description = "CIDR subnet A"
+}
+
+# ─── VM IPs ──────────────────────────────
 output "db_ip" {
   value       = google_compute_address.db.address
   description = "Database VM public IP"

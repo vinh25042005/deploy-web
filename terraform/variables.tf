@@ -11,9 +11,22 @@ variable "region" {
 }
 
 variable "zone" {
-  description = "GCP zone"
+  description = "GCP zone (primary)"
   type        = string
   default     = "asia-southeast1-a"
+}
+
+# ─── VPC Networking ──────────────────────
+variable "subnet_a_cidr" {
+  description = "CIDR for primary subnet (zone a)"
+  type        = string
+  default     = "10.20.1.0/24"
+}
+
+variable "subnet_b_cidr" {
+  description = "CIDR for HA subnet (zone b)"
+  type        = string
+  default     = "10.20.2.0/24"
 }
 
 variable "vm_disk_size" {
