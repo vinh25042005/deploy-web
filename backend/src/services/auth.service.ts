@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
+import { JWT_SECRET } from '../config/env';
 import { RegisterInput, LoginInput } from '../types';
 import { AppError } from '../middleware/errorHandler';
 
@@ -52,7 +53,7 @@ export class AuthService {
   private generateToken(userId: string, role: string): string {
     return jwt.sign(
       { userId, role },
-      process.env.JWT_SECRET || 'fallback-secret',
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
   }
