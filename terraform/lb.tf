@@ -1,5 +1,4 @@
 # ─── HTTPS Load Balancer ───
-# Self-signed cert (placeholder) → thay bằng google_managed_ssl_certificate khi có domain thật
 
 # Private key + self-signed cert
 resource "tls_private_key" "lb" {
@@ -94,5 +93,31 @@ resource "google_compute_global_forwarding_rule" "https" {
   name       = "techshop-https-forwarding"
   target     = google_compute_target_https_proxy.lb.self_link
   port_range = "443"
+  ip_address = google_compute_global_address.lb.address
+}
+
+# ─── HTTP → HTTPS Redirect ───
+
+# URL map cho redirect
+resource "google_compute_url_map" "http_redirect" {
+  name = "techshop-http-redirect"
+
+  default_url_redirect {
+    https_redirect = true
+    strip_query    = false
+  }
+}
+
+# HTTP proxy
+resource "google_compute_target_http_proxy" "http_redirect" {
+  name    = "techshop-http-redirect-proxy"
+  url_map = google_compute_url_map.http_redirect.self_link
+}
+
+# Forwarding rule: HTTP :80 → redirect HTTPS
+resource "google_compute_global_forwarding_rule" "http" {
+  name       = "techshop-http-forwarding"
+  target     = google_compute_target_http_proxy.http_redirect.self_link
+  port_range = "80"
   ip_address = google_compute_global_address.lb.address
 }
