@@ -47,7 +47,7 @@ resource "google_compute_firewall" "backend" {
   target_tags = ["shop-backend"]
 }
 
-# Frontend: public
+# Frontend: chỉ cho Load Balancer + Health Check (không mở 0.0.0.0/0)
 resource "google_compute_firewall" "frontend" {
   name    = "allow-frontend"
   network = google_compute_network.main.self_link
@@ -57,7 +57,7 @@ resource "google_compute_firewall" "frontend" {
     ports    = ["3000"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
   target_tags   = ["shop-frontend"]
 }
 

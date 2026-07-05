@@ -30,7 +30,12 @@ output "frontend_ip" {
   description = "Frontend VM public IP"
 }
 
+output "lb_ip" {
+  value       = google_compute_global_address.lb.address
+  description = "Load Balancer IP (truy cập qua HTTPS)"
+}
+
 output "frontend_url" {
-  value       = "http://${google_compute_address.frontend.address}:3000"
-  description = "Frontend URL (website + API proxy)"
+  value       = "https://${google_compute_global_address.lb.address}"
+  description = "Frontend URL qua HTTPS Load Balancer (self-signed cert)"
 }

@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: asia-southeast1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID || 'techshop-prod-2026' }}/techshop
-  FRONTEND_IP: ${{ vars.FRONTEND_IP }}
+  LB_IP: ${{ vars.LB_IP }}
   DB_INTERNAL_IP: ${{ vars.DB_INTERNAL_IP }}
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
                 -e JWT_EXPIRES_IN=7d \
                 -e PORT=3001 \
                 -e NODE_ENV=staging \
-                -e FRONTEND_URL=http://$FRONTEND_IP:3000 \
+                -e FRONTEND_URL=https://$LB_IP \
                 $REGISTRY/backend:latest;
               docker image prune -af 
             "
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment:
       name: production
-      url: http://$FRONTEND_IP:3000
+      url: https://$LB_IP
     steps:
       - uses: actions/checkout@v4
 
@@ -101,7 +101,7 @@ jobs:
                 -e JWT_EXPIRES_IN=7d \
                 -e PORT=3001 \
                 -e NODE_ENV=production \
-                -e FRONTEND_URL=http://$FRONTEND_IP:3000 \
+                -e FRONTEND_URL=https://$LB_IP \
                 $REGISTRY/backend:${{ github.ref_name }};
               docker image prune -af 
             "
