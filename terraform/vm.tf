@@ -5,6 +5,7 @@ resource "google_compute_address" "db" {
 
 resource "google_compute_address" "frontend" {
   name = "shop-frontend-ip"
+  # Giữ static IP cho tương lai nếu cần, VM hiện dùng internal qua LB
 }
 
 # ─── Persistent Disk cho PostgreSQL data ───
@@ -112,9 +113,7 @@ resource "google_compute_instance" "frontend" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_a.self_link
-    access_config {
-      nat_ip = google_compute_address.frontend.address
-    }
+    # Internal-only: truy cập qua Load Balancer, không cần public IP
   }
 
   metadata_startup_script = <<-EOF
