@@ -100,6 +100,28 @@ resource "google_compute_instance" "db" {
       -v /:/host:ro,rslave \
       prom/node-exporter:latest \
       --path.rootfs=/host
+
+    # Promtail - gửi Docker logs về Loki
+    cat > /opt/promtail-config.yml <<'PROMTAIL'
+server:
+  http_listen_port: 9080
+positions:
+  filename: /tmp/positions.yaml
+clients:
+  - url: http://10.20.1.5:3100/loki/api/v1/push
+scrape_configs:
+  - job_name: docker
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+PROMTAIL
+    docker run -d --name promtail --restart always \
+      -v /opt/promtail-config.yml:/etc/promtail/config.yml \
+      -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+      grafana/promtail:latest \
+      -config.file=/etc/promtail/config.yml
   EOF
 
   tags = ["shop-db", "shop"]
@@ -134,6 +156,28 @@ resource "google_compute_instance" "backend" {
       -v /:/host:ro,rslave \
       prom/node-exporter:latest \
       --path.rootfs=/host
+
+    # Promtail - gửi Docker logs về Loki
+    cat > /opt/promtail-config.yml <<'PROMTAIL'
+server:
+  http_listen_port: 9080
+positions:
+  filename: /tmp/positions.yaml
+clients:
+  - url: http://10.20.1.5:3100/loki/api/v1/push
+scrape_configs:
+  - job_name: docker
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+PROMTAIL
+    docker run -d --name promtail --restart always \
+      -v /opt/promtail-config.yml:/etc/promtail/config.yml \
+      -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+      grafana/promtail:latest \
+      -config.file=/etc/promtail/config.yml
   EOF
 
   tags = ["shop-backend", "shop"]
@@ -168,6 +212,28 @@ resource "google_compute_instance" "frontend" {
       -v /:/host:ro,rslave \
       prom/node-exporter:latest \
       --path.rootfs=/host
+
+    # Promtail - gửi Docker logs về Loki
+    cat > /opt/promtail-config.yml <<'PROMTAIL'
+server:
+  http_listen_port: 9080
+positions:
+  filename: /tmp/positions.yaml
+clients:
+  - url: http://10.20.1.5:3100/loki/api/v1/push
+scrape_configs:
+  - job_name: docker
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+PROMTAIL
+    docker run -d --name promtail --restart always \
+      -v /opt/promtail-config.yml:/etc/promtail/config.yml \
+      -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+      grafana/promtail:latest \
+      -config.file=/etc/promtail/config.yml
   EOF
 
   tags = ["shop-frontend", "shop"]
