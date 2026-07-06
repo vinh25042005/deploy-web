@@ -1,4 +1,4 @@
-# Static IP
+# Static IP (Public)
 resource "google_compute_address" "db" {
   name = "shop-db-ip"
 }
@@ -6,6 +6,35 @@ resource "google_compute_address" "db" {
 resource "google_compute_address" "frontend" {
   name = "shop-frontend-ip"
   # Giữ static IP cho tương lai nếu cần, VM hiện dùng internal qua LB
+}
+
+# Static Internal IPs — không đổi khi rebuild VM
+resource "google_compute_address" "db_internal" {
+  name         = "shop-db-internal"
+  address_type = "INTERNAL"
+  address      = "10.20.1.2"
+  subnetwork   = google_compute_subnetwork.subnet_a.self_link
+}
+
+resource "google_compute_address" "backend_internal" {
+  name         = "shop-backend-internal"
+  address_type = "INTERNAL"
+  address      = "10.20.1.3"
+  subnetwork   = google_compute_subnetwork.subnet_a.self_link
+}
+
+resource "google_compute_address" "frontend_internal" {
+  name         = "shop-frontend-internal"
+  address_type = "INTERNAL"
+  address      = "10.20.1.4"
+  subnetwork   = google_compute_subnetwork.subnet_a.self_link
+}
+
+resource "google_compute_address" "monitor_internal" {
+  name         = "shop-monitor-internal"
+  address_type = "INTERNAL"
+  address      = "10.20.1.5"
+  subnetwork   = google_compute_subnetwork.subnet_a.self_link
 }
 
 # ─── Persistent Disk cho PostgreSQL data ───
@@ -37,6 +66,7 @@ resource "google_compute_instance" "db" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_a.self_link
+    network_ip = google_compute_address.db_internal.address
     access_config {
       nat_ip = google_compute_address.db.address
     }
@@ -64,6 +94,12 @@ resource "google_compute_instance" "db" {
       -p 5432:5432 \
       -v /data/postgres:/var/lib/postgresql/data \
       postgres:16-alpine
+
+    docker run -d --name node-exporter --restart always \
+      --network host \
+      -v /:/host:ro,rslave \
+      prom/node-exporter:latest \
+      --path.rootfs=/host
   EOF
 
   tags = ["shop-db", "shop"]
@@ -84,8 +120,8 @@ resource "google_compute_instance" "backend" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_a.self_link
-    # Không có access_config → backend chỉ có internal IP, an toàn hơn
-    # Frontend proxy /api/* sang backend qua internal network
+    network_ip = google_compute_address.backend_internal.address
+    # Không có access_config → backend chỉ có internal IP
   }
 
   metadata_startup_script = <<-EOF
@@ -93,6 +129,11 @@ resource "google_compute_instance" "backend" {
     apt-get update && apt-get install -y docker.io
     systemctl enable docker
     usermod -aG docker deploy
+    docker run -d --name node-exporter --restart always \
+      --network host \
+      -v /:/host:ro,rslave \
+      prom/node-exporter:latest \
+      --path.rootfs=/host
   EOF
 
   tags = ["shop-backend", "shop"]
@@ -113,7 +154,8 @@ resource "google_compute_instance" "frontend" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_a.self_link
-    # Internal-only: truy cập qua Load Balancer, không cần public IP
+    network_ip = google_compute_address.frontend_internal.address
+    # Internal-only: truy cập qua Load Balancer
   }
 
   metadata_startup_script = <<-EOF
@@ -121,6 +163,11 @@ resource "google_compute_instance" "frontend" {
     apt-get update && apt-get install -y docker.io
     systemctl enable docker
     usermod -aG docker deploy
+    docker run -d --name node-exporter --restart always \
+      --network host \
+      -v /:/host:ro,rslave \
+      prom/node-exporter:latest \
+      --path.rootfs=/host
   EOF
 
   tags = ["shop-frontend", "shop"]
