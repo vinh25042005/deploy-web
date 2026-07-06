@@ -37,6 +37,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -44,8 +45,6 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
-    ports:
-      - "9090:9090"
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -83,7 +82,7 @@ scrape_configs:
       - targets: ['localhost:9090']
   - job_name: 'node-monitor'
     static_configs:
-      - targets: ['localhost:9100']
+      - targets: ['127.0.0.1:9100']
   - job_name: 'node-backend'
     static_configs:
       - targets: ['10.20.1.3:9100']
@@ -102,7 +101,7 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://10.20.1.5:9090
     isDefault: true
     editable: false
 YAML
