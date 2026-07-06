@@ -1,8 +1,4 @@
 # Static IP (Public)
-resource "google_compute_address" "db" {
-  name = "shop-db-ip"
-}
-
 resource "google_compute_address" "frontend" {
   name = "shop-frontend-ip"
   # Giữ static IP cho tương lai nếu cần, VM hiện dùng internal qua LB
@@ -67,9 +63,7 @@ resource "google_compute_instance" "db" {
   network_interface {
     subnetwork = google_compute_subnetwork.subnet_a.self_link
     network_ip = google_compute_address.db_internal.address
-    access_config {
-      nat_ip = google_compute_address.db.address
-    }
+    # Internal-only: IAP SSH + Cloud NAT cho outbound (pull image)
   }
 
   metadata_startup_script = <<-EOF
