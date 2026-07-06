@@ -28,6 +28,9 @@ LABEL org.opencontainers.image.version="1.0.0"
 RUN apk upgrade --no-cache && adduser -D frontend
 RUN npm install -g npm@latest
 
+# Backend internal URL cho Next.js rewrites (cần ở runtime)
+ENV BACKEND_INTERNAL_URL=http://10.20.1.3:3001
+
 WORKDIR /app
 COPY --from=build --chown=frontend:frontend /build/package*.json ./
 COPY --from=build --chown=frontend:frontend /build/.next ./.next
