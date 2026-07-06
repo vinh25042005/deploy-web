@@ -109,6 +109,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: docker
+          host: shop-db
           __path__: /var/lib/docker/containers/*/*.log
 PROMTAIL
     docker run -d --name promtail --restart always \
@@ -165,6 +166,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: docker
+          host: shop-backend
           __path__: /var/lib/docker/containers/*/*.log
 PROMTAIL
     docker run -d --name promtail --restart always \
@@ -221,6 +223,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: docker
+          host: shop-frontend
           __path__: /var/lib/docker/containers/*/*.log
 PROMTAIL
     docker run -d --name promtail --restart always \
