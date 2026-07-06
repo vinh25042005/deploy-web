@@ -15,11 +15,6 @@ output "subnet_a_cidr" {
 }
 
 # ─── VM IPs ──────────────────────────────
-output "db_ip" {
-  value       = google_compute_address.db.address
-  description = "Database VM public IP"
-}
-
 output "backend_internal_ip" {
   value       = google_compute_instance.backend.network_interface[0].network_ip
   description = "Backend VM internal IP (chỉ frontend nối được)"
