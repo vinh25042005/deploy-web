@@ -41,6 +41,12 @@ variable "db_data_disk_size" {
   default     = 20
 }
 
+variable "monitor_disk_size" {
+  description = "Monitoring VM boot disk GB"
+  type        = number
+  default     = 20
+}
+
 variable "ssh_user" {
   description = "SSH username for VM"
   type        = string
@@ -77,4 +83,9 @@ variable "backend_machine_type" {
 
 variable "frontend_machine_type" {
   default = "e2-micro"    # Next.js
+}
+variable "monitor_machine_type" {
+  description = "Monitoring VM machine type"
+  type        = string
+  default     = "e2-small"
 }
