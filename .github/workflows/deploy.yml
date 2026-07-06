@@ -60,6 +60,15 @@ jobs:
               docker image prune -af 
             "
 
+      - name: Deploy Monitoring
+        run: |
+          gcloud compute scp --recurse monitoring/ deploy@shop-monitor:/tmp/ --zone=asia-southeast1-a --tunnel-through-iap
+          gcloud compute ssh deploy@shop-monitor --zone=asia-southeast1-a --tunnel-through-iap \
+            --command="
+              sudo mkdir -p /opt/monitoring && sudo cp -r /tmp/monitoring/* /opt/monitoring/;
+              cd /opt/monitoring && sudo docker-compose up -d
+            "
+
       - name: Smoke Test
         run: |
           for i in {1..30}; do
@@ -115,6 +124,15 @@ jobs:
               docker run -d --name frontend --restart always -p 3000:3000 \
                 $REGISTRY/frontend:${{ github.ref_name }};
               docker image prune -af 
+            "
+
+      - name: Deploy Monitoring
+        run: |
+          gcloud compute scp --recurse monitoring/ deploy@shop-monitor:/tmp/ --zone=asia-southeast1-a --tunnel-through-iap
+          gcloud compute ssh deploy@shop-monitor --zone=asia-southeast1-a --tunnel-through-iap \
+            --command="
+              sudo mkdir -p /opt/monitoring && sudo cp -r /tmp/monitoring/* /opt/monitoring/;
+              cd /opt/monitoring && sudo docker-compose up -d
             "
 
       - name: Smoke Test
