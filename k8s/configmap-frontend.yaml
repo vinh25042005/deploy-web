@@ -6,5 +6,5 @@ metadata:
   creationTimestamp: "2026-07-07T07:13:14Z"
   name: frontend-config
   namespace: techshop
-  resourceVersion: "1783408394238063012"
+  resourceVersion: "1783413706492767012"
   uid: 19fea47c-9d4c-40df-8374-400d01a856fb
