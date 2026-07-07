@@ -18,7 +18,7 @@ resource "google_compute_firewall" "allow-internal" {
   source_ranges = [var.subnet_a_cidr, var.subnet_b_cidr]
 }
 
-# Database: chỉ cho backend kết nối
+# Database: chỉ cho backend VM + GKE pods kết nối
 resource "google_compute_firewall" "db" {
   name    = "allow-postgres"
   network = google_compute_network.main.self_link
@@ -28,8 +28,9 @@ resource "google_compute_firewall" "db" {
     ports    = ["5432"]
   }
 
-  source_tags = ["shop-backend"]
-  target_tags = ["shop-db"]
+  source_tags  = ["shop-backend"]
+  source_ranges = ["10.88.0.0/14"]
+  target_tags  = ["shop-db"]
 }
 
 # Backend API: chỉ cho frontend nội bộ (Next.js proxy /api/*)
@@ -87,4 +88,18 @@ resource "google_compute_firewall" "allow-health-check" {
 
   source_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
   target_tags   = ["shop-backend", "shop-frontend"]
+}
+
+# Rancher UI: mở port 80/443 ra Internet
+resource "google_compute_firewall" "rancher" {
+  name    = "allow-rancher"
+  network = google_compute_network.main.self_link
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80", "443"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["shop-rancher"]
 }
