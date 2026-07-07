@@ -14,7 +14,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: docker
-          host: VM_PLACEHOLDER
+          host: shop-monitor
           __path__: /var/lib/docker/containers/*/*.log
     pipeline_stages:
       - docker: {}
