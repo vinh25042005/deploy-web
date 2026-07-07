@@ -3,41 +3,29 @@ kind: Service
 metadata:
   annotations:
     cloud.google.com/neg: '{"ingress":true}'
-    cloudprovider.harvesterhci.io/ipam: dhcp
-    field.cattle.io/publicEndpoints: '[{"addresses":["34.158.47.150"],"port":80,"protocol":"TCP","serviceName":"techshop:frontend-loadbalancer","allNodes":false}]'
-    field.cattle.io/targetWorkloadIds: '["techshop/frontend"]'
-    management.cattle.io/ui-managed: "true"
-    networking.gke.io/target-pool: a8a4cc9659cee4a8e93471c8773ea03d
-  creationTimestamp: "2026-07-07T04:23:51Z"
-  finalizers:
-  - gke.networking.io/l4-netlb-v1
-  - service.kubernetes.io/load-balancer-cleanup
-  name: frontend-loadbalancer
+  creationTimestamp: "2026-07-07T04:50:41Z"
+  labels:
+    workload.user.cattle.io/workloadselector: apps.deployment-techshop-frontend
+  name: frontend
   namespace: techshop
-  resourceVersion: "1783398282647535001"
-  uid: 8a4cc965-9cee-4a8e-9347-1c8773ea03db
+  resourceVersion: "1783411443869647009"
+  uid: 70f43dc0-1b62-448e-b50f-38eeb8bf4471
 spec:
-  allocateLoadBalancerNodePorts: true
-  clusterIP: 34.118.228.171
+  clusterIP: 34.118.237.203
   clusterIPs:
-  - 34.118.228.171
-  externalTrafficPolicy: Cluster
+  - 34.118.237.203
   internalTrafficPolicy: Cluster
   ipFamilies:
   - IPv4
   ipFamilyPolicy: SingleStack
   ports:
   - name: http
-    nodePort: 31949
-    port: 80
+    port: 3000
     protocol: TCP
     targetPort: 3000
   selector:
     workload.user.cattle.io/workloadselector: apps.deployment-techshop-frontend
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 status:
-  loadBalancer:
-    ingress:
-    - ip: 34.158.47.150
-      ipMode: VIP
+  loadBalancer: {}
