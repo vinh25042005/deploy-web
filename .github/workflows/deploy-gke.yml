@@ -31,10 +31,10 @@ jobs:
 
       - name: Deploy Backend
         run: |
-          kubectl set image deployment/backend backend=$REGISTRY/backend:latest -n techshop
+          kubectl set image deployment/backend container-0=$REGISTRY/backend:latest -n techshop
           kubectl rollout status deployment/backend -n techshop --timeout=120s
 
       - name: Deploy Frontend
         run: |
-          kubectl set image deployment/frontend frontend=$REGISTRY/frontend:latest -n techshop
+          kubectl set image deployment/frontend container-0=$REGISTRY/frontend:latest -n techshop
           kubectl rollout status deployment/frontend -n techshop --timeout=120s
