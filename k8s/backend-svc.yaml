@@ -3,26 +3,27 @@ kind: Service
 metadata:
   annotations:
     cloud.google.com/neg: '{"ingress":true}'
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{"cloud.google.com/neg":"{\"ingress\":true}"},"creationTimestamp":"2026-07-07T04:10:14Z","name":"backend","namespace":"techshop","resourceVersion":"1783397414762479005","uid":"99875ec3-cd44-4f61-b191-fa2f041b68be"},"spec":{"clusterIP":"34.118.238.63","clusterIPs":["34.118.238.63"],"internalTrafficPolicy":"Cluster","ipFamilies":["IPv4"],"ipFamilyPolicy":"SingleStack","ports":[{"name":"http-backend","port":3001,"protocol":"TCP","targetPort":3001}],"sessionAffinity":"None","type":"ClusterIP"},"status":{"loadBalancer":{}}}
-  creationTimestamp: "2026-07-07T07:54:03Z"
+  creationTimestamp: "2026-07-07T08:14:47Z"
+  labels:
+    workload.user.cattle.io/workloadselector: apps.deployment-techshop-backend
   name: backend
   namespace: techshop
-  resourceVersion: "1783410843823519005"
-  uid: 2bfe5bd1-d483-4667-8785-4a807417aef0
+  resourceVersion: "1783412087838479005"
+  uid: 7727f363-1b10-40e8-98c5-15311569b49d
 spec:
-  clusterIP: 34.118.238.63
+  clusterIP: 34.118.235.240
   clusterIPs:
-  - 34.118.238.63
+  - 34.118.235.240
   internalTrafficPolicy: Cluster
   ipFamilies:
   - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-  - name: http-backend
-    port: 3001
+  - port: 3001
     protocol: TCP
     targetPort: 3001
+  selector:
+    workload.user.cattle.io/workloadselector: apps.deployment-techshop-backend
   sessionAffinity: None
   type: ClusterIP
 status:
