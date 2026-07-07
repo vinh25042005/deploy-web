@@ -1,0 +1,13 @@
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  creationTimestamp: "2026-07-07T09:57:27Z"
+  name: techshop-ssd
+  resourceVersion: "1783418247546559013"
+  uid: c75b9d59-5807-436b-afef-1d0d0822226e
+parameters:
+  type: pd-ssd
+provisioner: pd.csi.storage.gke.io
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer

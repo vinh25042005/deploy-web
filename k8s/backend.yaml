@@ -2,16 +2,16 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    deployment.kubernetes.io/revision: "9"
+    deployment.kubernetes.io/revision: "15"
     kubectl.kubernetes.io/last-applied-configuration: |
       {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"deployment.kubernetes.io/revision":"2"},"creationTimestamp":"2026-07-07T04:08:46Z","generation":2,"labels":{"workload.user.cattle.io/workloadselector":"apps.deployment-techshop-backend"},"name":"backend","namespace":"techshop","resourceVersion":"1783397926277391014","uid":"b8dcfd72-85cf-4966-ba05-b1db7216d891"},"spec":{"progressDeadlineSeconds":600,"replicas":2,"revisionHistoryLimit":10,"selector":{"matchLabels":{"workload.user.cattle.io/workloadselector":"apps.deployment-techshop-backend"}},"strategy":{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"},"type":"RollingUpdate"},"template":{"metadata":{"labels":{"workload.user.cattle.io/workloadselector":"apps.deployment-techshop-backend"},"namespace":"techshop"},"spec":{"containers":[{"env":[{"name":"DATABASE_URL","value":"postgresql://postgres:gy5LxdPi2LNyKOqa83KAYyJ2@10.20.1.2:5432/shopdb?schema=public"},{"name":"JWT_SECRET","value":"8a30ea6fd5b23a08598813b0c87d68ba6fe65ae8e23cf1faff050f96c266716c129c4250eefa1cbca6ce1480502ad2a22f4274dd77d822c2664d80e2bfe9a4cc"},{"name":"JWT_EXPIRES_IN","value":"7d"},{"name":"PORT","value":"3001"},{"name":"NODE_ENV","value":"production"},{"name":"FRONTEND_URL","value":"https://8.233.56.51"}],"image":"asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/backend:latest","imagePullPolicy":"Always","name":"container-0","resources":{},"securityContext":{"allowPrivilegeEscalation":false,"privileged":false,"readOnlyRootFilesystem":false,"runAsNonRoot":false},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File"}],"dnsPolicy":"ClusterFirst","restartPolicy":"Always","schedulerName":"default-scheduler","securityContext":{},"terminationGracePeriodSeconds":30}}},"status":{"availableReplicas":2,"conditions":[{"lastTransitionTime":"2026-07-07T04:08:46Z","lastUpdateTime":"2026-07-07T04:12:26Z","message":"ReplicaSet \"backend-5cfc67fd76\" has successfully progressed.","reason":"NewReplicaSetAvailable","status":"True","type":"Progressing"},{"lastTransitionTime":"2026-07-07T04:18:46Z","lastUpdateTime":"2026-07-07T04:18:46Z","message":"Deployment has minimum availability.","reason":"MinimumReplicasAvailable","status":"True","type":"Available"}],"observedGeneration":2,"readyReplicas":2,"replicas":2,"terminatingReplicas":0,"updatedReplicas":2}}
   creationTimestamp: "2026-07-07T08:02:03Z"
-  generation: 9
+  generation: 15
   labels:
     workload.user.cattle.io/workloadselector: apps.deployment-techshop-backend
   name: backend
   namespace: techshop
-  resourceVersion: "1783413875338415014"
+  resourceVersion: "1783420093818703014"
   uid: 7f2533db-1e8a-443a-baa5-bd8fc01be271
 spec:
   progressDeadlineSeconds: 600
@@ -28,8 +28,8 @@ spec:
   template:
     metadata:
       annotations:
-        cattle.io/timestamp: "2026-07-07T08:43:59Z"
-        kubectl.kubernetes.io/restartedAt: "2026-07-07T08:22:40Z"
+        cattle.io/timestamp: "2026-07-07T09:45:49Z"
+        kubectl.kubernetes.io/restartedAt: "2026-07-07T10:27:39Z"
       labels:
         workload.user.cattle.io/workloadselector: apps.deployment-techshop-backend
       namespace: techshop
@@ -68,12 +68,12 @@ status:
     status: "True"
     type: Available
   - lastTransitionTime: "2026-07-07T08:02:03Z"
-    lastUpdateTime: "2026-07-07T08:44:05Z"
-    message: ReplicaSet "backend-56fdd7464f" has successfully progressed.
+    lastUpdateTime: "2026-07-07T10:27:43Z"
+    message: ReplicaSet "backend-ccc5f9f57" has successfully progressed.
     reason: NewReplicaSetAvailable
     status: "True"
     type: Progressing
-  observedGeneration: 9
+  observedGeneration: 15
   readyReplicas: 2
   replicas: 2
   terminatingReplicas: 0

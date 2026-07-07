@@ -2,12 +2,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
-    field.cattle.io/publicEndpoints: '[{"addresses":["35.240.222.141"],"port":443,"protocol":"HTTPS","serviceName":"techshop:frontend","ingressName":"techshop:techshop-ingress","hostname":"techshop.local","path":"/","allNodes":false}]'
+    field.cattle.io/publicEndpoints: '[{"addresses":["34.87.84.121"],"port":443,"protocol":"HTTPS","serviceName":"techshop:frontend","ingressName":"techshop:techshop-ingress","hostname":"techshop.local","path":"/","allNodes":false}]'
   creationTimestamp: "2026-07-07T04:51:28Z"
   generation: 2
   name: techshop-ingress
   namespace: techshop
-  resourceVersion: "1783414610122095012"
+  resourceVersion: "1783416440965343012"
   uid: c6f9dad5-90c8-4704-9dec-1eb27fe17bee
 spec:
   ingressClassName: nginx
@@ -29,4 +29,4 @@ spec:
 status:
   loadBalancer:
     ingress:
-    - ip: 35.240.222.141
+    - ip: 34.87.84.121

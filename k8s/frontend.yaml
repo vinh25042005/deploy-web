@@ -3,16 +3,16 @@ kind: Deployment
 metadata:
   annotations:
     deployment.kubernetes.io/revision: "4"
-    field.cattle.io/publicEndpoints: '[{"addresses":["35.240.222.141"],"port":443,"protocol":"HTTPS","serviceName":"techshop:frontend","ingressName":"techshop:techshop-ingress","hostname":"techshop.local","path":"/","allNodes":false},{"addresses":["34.158.47.150"],"port":80,"protocol":"TCP","serviceName":"techshop:frontend-loadbalancer","allNodes":false}]'
+    field.cattle.io/publicEndpoints: '[{"addresses":["34.87.84.121"],"port":443,"protocol":"HTTPS","serviceName":"techshop:frontend","ingressName":"techshop:techshop-ingress","hostname":"techshop.local","path":"/","allNodes":false},{"addresses":["34.158.47.150"],"port":80,"protocol":"TCP","serviceName":"techshop:frontend-loadbalancer","allNodes":false}]'
     kubectl.kubernetes.io/last-applied-configuration: |
       {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"deployment.kubernetes.io/revision":"1","field.cattle.io/publicEndpoints":"[{\"addresses\":[\"34.21.233.85\"],\"port\":80,\"protocol\":\"TCP\",\"serviceName\":\"techshop:frontend\",\"allNodes\":false},{\"addresses\":[\"34.158.47.150\"],\"port\":80,\"protocol\":\"TCP\",\"serviceName\":\"techshop:frontend-loadbalancer\",\"allNodes\":false}]"},"creationTimestamp":"2026-07-07T04:23:50Z","generation":3,"labels":{"workload.user.cattle.io/workloadselector":"apps.deployment-techshop-frontend"},"name":"frontend","namespace":"techshop","resourceVersion":"1783398395309855017","uid":"884420df-f56d-4c51-8ca8-6e37be1b4283"},"spec":{"progressDeadlineSeconds":600,"replicas":2,"revisionHistoryLimit":10,"selector":{"matchLabels":{"workload.user.cattle.io/workloadselector":"apps.deployment-techshop-frontend"}},"strategy":{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"},"type":"RollingUpdate"},"template":{"metadata":{"labels":{"workload.user.cattle.io/workloadselector":"apps.deployment-techshop-frontend"},"namespace":"techshop"},"spec":{"affinity":{},"containers":[{"env":[{"name":"BACKEND_INTERNAL_URL","value":"http://backend:3001"}],"image":"asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/frontend:latest","imagePullPolicy":"Always","name":"container-0","ports":[{"containerPort":3000,"name":"http","protocol":"TCP"}],"resources":{},"securityContext":{"allowPrivilegeEscalation":false,"privileged":false,"readOnlyRootFilesystem":false,"runAsNonRoot":false},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File"}],"dnsPolicy":"ClusterFirst","restartPolicy":"Always","schedulerName":"default-scheduler","securityContext":{},"terminationGracePeriodSeconds":30}}},"status":{"availableReplicas":2,"conditions":[{"lastTransitionTime":"2026-07-07T04:24:03Z","lastUpdateTime":"2026-07-07T04:24:03Z","message":"Deployment has minimum availability.","reason":"MinimumReplicasAvailable","status":"True","type":"Available"},{"lastTransitionTime":"2026-07-07T04:23:51Z","lastUpdateTime":"2026-07-07T04:24:03Z","message":"ReplicaSet \"frontend-c9cc8d557\" has successfully progressed.","reason":"NewReplicaSetAvailable","status":"True","type":"Progressing"}],"observedGeneration":3,"readyReplicas":2,"replicas":2,"terminatingReplicas":0,"updatedReplicas":2}}
   creationTimestamp: "2026-07-07T08:02:18Z"
-  generation: 6
+  generation: 8
   labels:
     workload.user.cattle.io/workloadselector: apps.deployment-techshop-frontend
   name: frontend
   namespace: techshop
-  resourceVersion: "1783414610167119017"
+  resourceVersion: "1783416441006847017"
   uid: 0405b7cd-bc16-4021-b861-35d4c4f03d27
 spec:
   progressDeadlineSeconds: 600
@@ -75,7 +75,7 @@ status:
     reason: NewReplicaSetAvailable
     status: "True"
     type: Progressing
-  observedGeneration: 6
+  observedGeneration: 8
   readyReplicas: 2
   replicas: 2
   terminatingReplicas: 0
