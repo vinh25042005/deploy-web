@@ -34,3 +34,8 @@ output "frontend_url" {
   value       = "https://${google_compute_global_address.lb.address}"
   description = "Frontend URL qua HTTPS Load Balancer (self-signed cert)"
 }
+
+output "rancher_ip" {
+  value       = google_compute_address.rancher.address
+  description = "Rancher UI public IP"
+}
