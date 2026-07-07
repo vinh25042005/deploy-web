@@ -23,6 +23,9 @@ jobs:
       - name: Setup gcloud + kubectl
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Install gke-gcloud-auth-plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
       - name: Get GKE credentials
         run: gcloud container clusters get-credentials techshop-gke --zone=asia-southeast1-a
 
