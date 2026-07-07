@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  creationTimestamp: "2026-07-07T04:51:28Z"
+  generation: 1
+  name: techshop-ingress
+  namespace: techshop
+  resourceVersion: "1783399888284111012"
+  uid: c6f9dad5-90c8-4704-9dec-1eb27fe17bee
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: frontend
+            port:
+              number: 3000
+        path: /
+        pathType: Prefix
+status:
+  loadBalancer: {}
