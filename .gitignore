@@ -46,3 +46,5 @@ screenshots/
 terraform.tfstate
 terraform.tfstate.backup
 terraform.tfvars
+
+k8s/secret-backend.yaml
