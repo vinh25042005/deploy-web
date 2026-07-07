@@ -48,3 +48,4 @@ terraform.tfstate.backup
 terraform.tfvars
 
 k8s/secret-backend.yaml
+k8s/secret-tls.yaml
