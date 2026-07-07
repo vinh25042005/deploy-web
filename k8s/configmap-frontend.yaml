@@ -1,0 +1,10 @@
+apiVersion: v1
+data:
+  BACKEND_INTERNAL_URL: http://backend:3001
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2026-07-07T07:13:14Z"
+  name: frontend-config
+  namespace: techshop
+  resourceVersion: "1783408394238063012"
+  uid: 19fea47c-9d4c-40df-8374-400d01a856fb
