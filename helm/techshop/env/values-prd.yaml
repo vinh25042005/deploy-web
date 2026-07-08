@@ -1,0 +1,28 @@
+backend:
+  replicas: 3
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+
+frontend:
+  replicas: 3
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+
+postgres:
+  storage:
+    size: 50Gi
+
+config:
+  nodeEnv: production
+  frontendUrl: https://shop.example.com
+
+hpa:
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPU: 70
+
+ingress:
+  host: shop.example.com
+  tlsSecret: prod-tls
