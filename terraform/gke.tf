@@ -20,7 +20,7 @@ resource "google_container_node_pool" "primary" {
   cluster  = google_container_cluster.primary.name
   location = var.zone
 
-  node_count = 2
+  node_count = 3
 
   node_config {
     machine_type = "e2-medium"

@@ -4,37 +4,23 @@ output "vpc_name" {
   description = "Tên VPC"
 }
 
-output "vpc_self_link" {
-  value       = google_compute_network.main.self_link
-  description = "VPC self link"
-}
-
 output "subnet_a_cidr" {
   value       = google_compute_subnetwork.subnet_a.ip_cidr_range
   description = "CIDR subnet A"
 }
 
-# ─── VM IPs ──────────────────────────────
-output "backend_internal_ip" {
-  value       = google_compute_instance.backend.network_interface[0].network_ip
-  description = "Backend VM internal IP (chỉ frontend nối được)"
+# ─── GKE ─────────────────────────────────
+output "gke_cluster_name" {
+  value       = google_container_cluster.primary.name
+  description = "GKE Cluster name"
 }
 
-output "frontend_ip" {
-  value       = google_compute_address.frontend.address
-  description = "Frontend VM public IP"
+output "gke_node_count" {
+  value       = google_container_node_pool.primary.node_count
+  description = "Number of GKE nodes"
 }
 
-output "lb_ip" {
-  value       = google_compute_global_address.lb.address
-  description = "Load Balancer IP (truy cập qua HTTPS)"
-}
-
-output "frontend_url" {
-  value       = "https://${google_compute_global_address.lb.address}"
-  description = "Frontend URL qua HTTPS Load Balancer (self-signed cert)"
-}
-
+# ─── Rancher ─────────────────────────────
 output "rancher_ip" {
   value       = google_compute_address.rancher.address
   description = "Rancher UI public IP"
