@@ -1,31 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    cloud.google.com/neg: '{"ingress":true}'
-    field.cattle.io/targetWorkloadIds: '["techshop/postgres"]'
-    management.cattle.io/ui-managed: "true"
-  creationTimestamp: "2026-07-07T10:14:17Z"
   name: postgres
   namespace: techshop
-  resourceVersion: "1783419257420015004"
-  uid: 9bdae936-ab25-4a4f-81fa-cc9210eac7b9
 spec:
-  clusterIP: 34.118.237.192
-  clusterIPs:
-  - 34.118.237.192
-  internalTrafficPolicy: Cluster
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
-  - name: 5432tcp
-    port: 5432
-    protocol: TCP
-    targetPort: 5432
+    - port: 5432
+      targetPort: 5432
   selector:
-    workload.user.cattle.io/workloadselector: apps.deployment-techshop-postgres
-  sessionAffinity: None
+    app: postgres
   type: ClusterIP
-status:
-  loadBalancer: {}
