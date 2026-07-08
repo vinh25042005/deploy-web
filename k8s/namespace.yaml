@@ -1,22 +1,4 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  annotations:
-    cattle.io/status: '{"Conditions":[{"Type":"ResourceQuotaInit","Status":"True","Message":"","LastUpdateTime":"2026-07-07T04:07:04Z"},{"Type":"InitialRolesPopulated","Status":"True","Message":"","LastUpdateTime":"2026-07-07T04:07:05Z"}]}'
-    field.cattle.io/containerDefaultResourceLimit: '{}'
-    field.cattle.io/projectId: c-m-g2pk5b9k:p-b2bz2
-    lifecycle.cattle.io/create.namespace-auth: "true"
-  creationTimestamp: "2026-07-07T04:07:03Z"
-  finalizers:
-  - controller.cattle.io/namespace-auth
-  labels:
-    field.cattle.io/projectId: p-b2bz2
-    kubernetes.io/metadata.name: techshop
   name: techshop
-  resourceVersion: "1783397224233375020"
-  uid: 8e6f802d-fe25-4574-a405-0f2420b80b15
-spec:
-  finalizers:
-  - kubernetes
-status:
-  phase: Active

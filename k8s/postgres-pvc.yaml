@@ -1,31 +1,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  annotations:
-    pv.kubernetes.io/bind-completed: "yes"
-    pv.kubernetes.io/bound-by-controller: "yes"
-    volume.beta.kubernetes.io/storage-provisioner: pd.csi.storage.gke.io
-    volume.kubernetes.io/selected-node: gke-techshop-gke-techshop-node-pool-26be902f-qk70
-    volume.kubernetes.io/storage-provisioner: pd.csi.storage.gke.io
-  creationTimestamp: "2026-07-07T10:03:55Z"
-  finalizers:
-  - kubernetes.io/pvc-protection
   name: postgres-pvc
   namespace: techshop
-  resourceVersion: "1783419259312479006"
-  uid: 90a67d56-6463-400d-bba6-1202600cf41e
 spec:
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   resources:
     requests:
       storage: 10Gi
   storageClassName: techshop-ssd
-  volumeMode: Filesystem
-  volumeName: pvc-90a67d56-6463-400d-bba6-1202600cf41e
-status:
-  accessModes:
-  - ReadWriteOnce
-  capacity:
-    storage: 10Gi
-  phase: Bound
