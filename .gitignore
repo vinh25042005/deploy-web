@@ -43,11 +43,20 @@ screenshots/
 
 # Terraform
 .terraform/
-terraform.tfstate
-terraform.tfstate.backup
+*.tfstate
+*.tfstate.backup
 terraform.tfvars
+**/terraform.tfvars
+
+# Helm secrets
+**/values-secret.yaml
+
+# Ansible
+ansible/.vault_pass
+ansible/group_vars/vault.yml
 
 k8s/secret-backend.yaml
+k8s/secret-tls.yaml
 helm/techshop/env/values-secret.yaml
 
 k8s/secret-tls.yaml
