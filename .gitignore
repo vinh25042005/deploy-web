@@ -48,4 +48,7 @@ terraform.tfstate.backup
 terraform.tfvars
 
 k8s/secret-backend.yaml
+helm/techshop/env/values-secret.yaml
+
 k8s/secret-tls.yaml
+helm/techshop/env/values-secret.yaml
