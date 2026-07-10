@@ -43,26 +43,6 @@ module "compute" {
   key_name      = var.key_name
 }
 
-module "loadbalancer" {
-  source        = "../../modules/loadbalancer"
-  project_name  = var.project_name
-  subnet_ids   = [module.network.public_subnet_a_id, module.network.public_subnet_b_id]
-  sg_ids        = [module.network.sg_allow_https_id]
-  instance_type = "t3.micro"
-  key_name      = var.key_name
-  node_ips      = module.compute.node_private_ips
-}
-
-
-module "rancher" {
-  source        = "../../modules/rancher"
-  project_name  = var.project_name
-  subnet_id     = module.network.public_subnet_a_id
-  sg_ids        = [module.network.sg_allow_https_id]
-  instance_type = "t3.medium"
-  key_name      = var.key_name
-}
-
 # ── Kubernetes + Helm provider ──
 # Lấy kubeconfig từ SSM (được node-1 upload khi khởi tạo):
 #   aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig \

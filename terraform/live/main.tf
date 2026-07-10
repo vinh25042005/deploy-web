@@ -30,7 +30,6 @@ locals {
     dev = {
       instance_type   = "t3.small"
       key_name        = "techshop-key"
-      rancher         = true
       backend_image   = "asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/backend:latest"
       frontend_image  = "asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/frontend:latest"
       replicas        = 2
@@ -39,7 +38,6 @@ locals {
     stg = {
       instance_type   = "t3.medium"
       key_name        = "techshop-key"
-      rancher         = true
       backend_image   = "asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/backend:latest"
       frontend_image  = "asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/frontend:latest"
       replicas        = 2
@@ -71,28 +69,6 @@ module "compute" {
   sg_ids        = [module.network.sg_allow_internal_id, module.network.sg_allow_https_id]
   instance_type = local.config[local.env].instance_type
   node_count    = 3
-  key_name      = local.config[local.env].key_name
-}
-
-# ── Load Balancer (nginx) ──
-module "loadbalancer" {
-  source        = "../modules/loadbalancer"
-  project_name  = var.project_name
-  subnet_ids   = [module.network.public_subnet_a_id, module.network.public_subnet_b_id]
-  sg_ids        = [module.network.sg_allow_https_id]
-  instance_type = "t3.micro"
-  key_name      = local.config[local.env].key_name
-  node_ips      = module.compute.node_private_ips
-}
-
-# ── Rancher ──
-module "rancher" {
-  count         = local.config[local.env].rancher ? 1 : 0
-  source        = "../modules/rancher"
-  project_name  = var.project_name
-  subnet_id     = module.network.public_subnet_a_id
-  sg_ids        = [module.network.sg_allow_https_id]
-  instance_type = "t3.medium"
   key_name      = local.config[local.env].key_name
 }
 

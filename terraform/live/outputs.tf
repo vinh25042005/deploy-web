@@ -8,16 +8,6 @@ output "k8s_node_ids" {
   value       = module.compute.node_instance_ids
 }
 
-output "lb_public_ips" {
-  description = "Load balancer public IPs"
-  value       = module.loadbalancer.lb_public_ips
-}
-
-output "rancher_url" {
-  description = "Rancher UI URL"
-  value       = module.rancher[*].rancher_url
-}
-
 output "vpc_id" {
   description = "VPC ID"
   value       = module.network.vpc_id

@@ -38,14 +38,6 @@ module "compute" {
   node_count    = 3
 }
 
-module "loadbalancer" {
-  source        = "../../modules/loadbalancer"
-  project_name  = var.project_name
-  subnet_ids   = [module.network.public_subnet_a_id, module.network.public_subnet_b_id]
-  sg_ids        = [module.network.sg_allow_https_id]
-  instance_type = "t3.micro"
-}
-
 # ── Kubernetes + Helm provider ──
 provider "kubernetes" {
   config_path = var.kubeconfig_path
