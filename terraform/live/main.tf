@@ -104,7 +104,7 @@ provider "kubernetes" {
   config_path = var.kubeconfig_path
 }
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     config_path = var.kubeconfig_path
   }
 }
@@ -140,6 +140,6 @@ module "k8s_app" {
   frontend_image = local.config[local.env].frontend_image
   replicas       = local.config[local.env].replicas
   ingress_host   = local.config[local.env].ingress_host
-  chart_path     = abspath("${path.module}/../helm/techshop")
+  chart_path     = abspath("${path.module}/../../helm/techshop")
   depends_on     = [terraform_data.fetch_kubeconfig]
 }
