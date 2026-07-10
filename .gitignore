@@ -61,3 +61,11 @@ helm/techshop/env/values-secret.yaml
 
 k8s/secret-tls.yaml
 helm/techshop/env/values-secret.yaml
+
+# Terraform State (sensitive)
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/.terraform.tfstate.lock.info
+
+# Terraform lock files (regenerated per env)
+**/.terraform.lock.hcl
