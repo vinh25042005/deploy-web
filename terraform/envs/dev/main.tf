@@ -6,12 +6,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  backend "s3" {
-    bucket  = "techshop-tfstate-dev"
-    key     = "terraform.tfstate"
-    region  = "ap-southeast-1"
-    encrypt = true
-  }
+  backend "local" {}
 }
 
 provider "aws" {
@@ -48,11 +43,11 @@ module "compute" {
 #   aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig \
 #     --query Parameter.Value --output text | base64 -d | gzip -d > ~/.kube/techshop-config
 provider "kubernetes" {
-  config_path = var.kubeconfig_path
+  config_path = pathexpand(var.kubeconfig_path)
 }
 provider "helm" {
   kubernetes = {
-    config_path = var.kubeconfig_path
+    config_path = pathexpand(var.kubeconfig_path)
   }
 }
 
