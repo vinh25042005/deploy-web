@@ -3,55 +3,72 @@
 ## Cấu trúc
 
 ```
-ansible/
-├── ansible.cfg                 # Config: inventory, roles_path, vault
-├── inventory/
-│   ├── hosts.yml               # 1 VM nhóm monitoring
-│   └── group_vars/all/
-│       ├── vars.yml            # Biến thường (ports, versions...)
-│       └── vault.yml           # 🔒 Secrets (Grafana password) - AES256
-├── playbooks/
-│   └── monitoring.yml          # Playbook chính
-└── roles/monitoring/
-    ├── defaults/main.yml
-    ├── tasks/main.yml          # 6 steps: install → config → start → verify
-    ├── handlers/main.yml       # Restart services
-    └── templates/
-        ├── prometheus.yml.j2   # Scrape config
-        ├── grafana.ini.j2      # Grafana settings
-        └── datasources.yml.j2  # Auto-connect Prometheus
+├── run.sh                       # 🚀 1 lệnh: tạo VM + cài monitoring
+├── terraform/                   # Tạo EC2 VM trên AWS
+│   ├── main.tf                  # EC2 + Security Group
+│   ├── variables.tf
+│   └── outputs.tf               # Public IP
+└── ansible/                     # Cài monitoring stack
+    ├── ansible.cfg
+    ├── inventory/
+    │   ├── hosts.yml
+    │   └── group_vars/all/
+    │       ├── vars.yml
+    │       └── vault.yml        🔒
+    ├── playbooks/
+    │   └── monitoring.yml
+    └── roles/monitoring/
+        ├── defaults/main.yml
+        ├── tasks/main.yml
+        ├── handlers/main.yml
+        └── templates/
+            ├── prometheus.yml.j2
+            ├── grafana.ini.j2
+            └── datasources.yml.j2
 ```
 
-## Quick Start
+## Quick Start — 1 lệnh duy nhất
 
-### 1. Sửa IP VM
-```yaml
-# inventory/group_vars/all/vars.yml
-monitoring_host: 10.20.1.100   # ← IP thật
-```
-
-### 2. Tạo vault password
 ```bash
-echo "my-password" > .vault_pass && chmod 600 .vault_pass
+./run.sh
 ```
 
-### 3. Chạy
+Luồng chạy:
+```
+terraform apply  →  tạo EC2 + SG (port 22, 9090, 3000, 9100)
+       ↓
+   đợi SSH sẵn sàng (retry 30 lần × 10s = 5 phút)
+       ↓
+ansible-playbook →  cài Prometheus + Grafana + Node Exporter
+       ↓
+   http://<IP>:3000  ← truy cập Grafana
+```
+
+## Chạy thủ công từng bước
+
 ```bash
-ansible-playbook playbooks/monitoring.yml
+# 1. Tạo VM
+cd terraform && terraform apply -auto-approve
+VM_IP=$(terraform output -raw public_ip)
+
+# 2. Chạy Ansible
+cd ../ansible
+ansible-playbook playbooks/monitoring.yml -e "monitoring_host=$VM_IP"
 ```
 
-### 4. Truy cập
-| Service | URL |
-|---|---|
-| Prometheus | `http://<IP>:9090` |
-| Grafana | `http://<IP>:3000` (admin / vault password) |
-| Node Exporter | `http://<IP>:9100/metrics` |
+## Truy cập
+
+| Service | URL | Login |
+|---|---|---|
+| Prometheus | `http://<IP>:9090` | Không cần |
+| Grafana | `http://<IP>:3000` | `admin` / (password trong vault.yml) |
+| Node Exporter | `http://<IP>:9100/metrics` | Không cần |
 
 ## Monitoring Stack
 
 ```
 ┌──────────────────────────────────┐
-│           VM monitoring           │
+│           EC2 monitoring          │
 │  Grafana:3000 ← Prometheus:9090  │
 │                      ↓ scrape    │
 │               Node Exporter:9100 │

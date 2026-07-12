@@ -1,9 +1,7 @@
 ---
-# Defaults — giá trị mặc định (có thể override bởi vars/ hoặc inventory)
-monitoring_packages:
-  - prometheus
-  - grafana
-  - prometheus-node-exporter
-
+# Defaults — paths (Ubuntu/Debian package defaults)
+prometheus_config_dir: /etc/prometheus
+prometheus_data_dir: /var/lib/prometheus
+grafana_config_dir: /etc/grafana
+grafana_data_dir: /var/lib/grafana
 grafana_admin_user: admin
-prometheus_retention: 15d
