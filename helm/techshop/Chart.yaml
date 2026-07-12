@@ -1,5 +1,0 @@
-apiVersion: v2
-name: techshop
-description: TechShop E-Commerce - Next.js + Express + PostgreSQL on K8s
-version: 1.0.0
-appVersion: "1.0.0"
