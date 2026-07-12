@@ -1,0 +1,24 @@
+---
+# Handlers — restart services khi config thay đổi
+# File: roles/monitoring/handlers/main.yml
+
+- name: Restart Prometheus
+  systemd:
+    name: prometheus
+    state: restarted
+    daemon_reload: yes
+  become: yes
+
+- name: Restart Grafana
+  systemd:
+    name: grafana-server
+    state: restarted
+    daemon_reload: yes
+  become: yes
+
+- name: Restart Node Exporter
+  systemd:
+    name: prometheus-node-exporter
+    state: restarted
+    daemon_reload: yes
+  become: yes

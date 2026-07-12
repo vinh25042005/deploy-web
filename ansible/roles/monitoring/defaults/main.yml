@@ -1,0 +1,9 @@
+---
+# Defaults — giá trị mặc định (có thể override bởi vars/ hoặc inventory)
+monitoring_packages:
+  - prometheus
+  - grafana
+  - prometheus-node-exporter
+
+grafana_admin_user: admin
+prometheus_retention: 15d

@@ -1,0 +1,17 @@
+# Grafana main configuration
+# File: roles/monitoring/templates/grafana.ini.j2
+
+[server]
+http_port = {{ grafana_port }}
+domain = {{ ansible_host }}
+root_url = http://{{ ansible_host }}:{{ grafana_port }}
+
+[security]
+admin_user = {{ grafana_admin_user }}
+admin_password = {{ grafana_admin_password }}
+
+[auth.anonymous]
+enabled = false
+
+[users]
+allow_sign_up = false

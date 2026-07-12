@@ -1,0 +1,14 @@
+---
+# Playbook: Cài đặt monitoring stack (Prometheus + Grafana + Node Exporter)
+# Usage:
+#   ansible-playbook playbooks/monitoring.yml
+#   ansible-playbook playbooks/monitoring.yml --ask-vault-pass
+#
+# File: playbooks/monitoring.yml
+
+- name: Install Monitoring Stack
+  hosts: monitoring
+  become: yes
+
+  roles:
+    - role: monitoring

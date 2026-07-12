@@ -1,0 +1,115 @@
+---
+# Tasks — các bước cài đặt monitoring stack
+# File: roles/monitoring/tasks/main.yml
+
+# ── Step 1: Update apt cache ──
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+# ── Step 2: Cài đặt packages ──
+- name: Install Prometheus, Grafana, Node Exporter
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - prometheus
+    - grafana
+    - prometheus-node-exporter
+  become: yes
+  notify:
+    - Restart Prometheus
+    - Restart Grafana
+    - Restart Node Exporter
+
+# ── Step 3: Cấu hình Prometheus ──
+- name: Deploy Prometheus config
+  template:
+    src: prometheus.yml.j2
+    dest: "{{ prometheus_config_dir }}/prometheus.yml"
+    owner: prometheus
+    group: prometheus
+    mode: "0644"
+  become: yes
+  notify: Restart Prometheus
+
+- name: Ensure Prometheus data directory exists
+  file:
+    path: "{{ prometheus_data_dir }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+  become: yes
+
+# ── Step 4: Cấu hình Grafana ──
+- name: Deploy Grafana config
+  template:
+    src: grafana.ini.j2
+    dest: "{{ grafana_config_dir }}/grafana.ini"
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  become: yes
+  notify: Restart Grafana
+
+- name: Deploy Grafana datasource (Prometheus)
+  template:
+    src: datasources.yml.j2
+    dest: "{{ grafana_config_dir }}/provisioning/datasources/prometheus.yml"
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  become: yes
+  notify: Restart Grafana
+
+# ── Step 5: Start & enable services ──
+- name: Start and enable Prometheus
+  systemd:
+    name: prometheus
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Start and enable Grafana
+  systemd:
+    name: grafana-server
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Start and enable Node Exporter
+  systemd:
+    name: prometheus-node-exporter
+    state: started
+    enabled: yes
+  become: yes
+
+# ── Step 6: Verify services ──
+- name: Wait for Prometheus to be ready
+  uri:
+    url: "http://localhost:{{ prometheus_port }}/-/ready"
+    status_code: 200
+  register: prom_status
+  until: prom_status.status == 200
+  retries: 10
+  delay: 5
+
+- name: Wait for Grafana to be ready
+  uri:
+    url: "http://localhost:{{ grafana_port }}/api/health"
+    status_code: 200
+  register: graf_status
+  until: graf_status.status == 200
+  retries: 10
+  delay: 5
+
+- name: Print access info
+  debug:
+    msg:
+      - "✅ Monitoring stack đã cài đặt thành công!"
+      - "   Prometheus:  http://{{ ansible_host }}:{{ prometheus_port }}"
+      - "   Grafana:     http://{{ ansible_host }}:{{ grafana_port }} (admin / {{ grafana_admin_password }})"
+      - "   Node Exporter: http://{{ ansible_host }}:{{ node_exporter_port }}/metrics"

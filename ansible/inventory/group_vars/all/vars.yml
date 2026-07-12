@@ -1,0 +1,30 @@
+# Group vars: all hosts
+# File: inventory/group_vars/all/vars.yml
+
+# ── SSH connection ──
+ansible_user: ubuntu
+ssh_key_path: "~/.ssh/techshop-key.pem"
+monitoring_host: 10.20.1.100  # Thay bằng IP thật của VM
+
+# ── Monitoring stack versions ──
+prometheus_version: "2.55.0"
+grafana_version: "11.3.0"
+node_exporter_version: "1.8.2"
+
+# ── Ports ──
+prometheus_port: 9090
+grafana_port: 3000
+node_exporter_port: 9100
+
+# ── Paths ──
+prometheus_config_dir: /etc/prometheus
+prometheus_data_dir: /var/lib/prometheus
+grafana_config_dir: /etc/grafana
+grafana_data_dir: /var/lib/grafana
+
+# ── Prometheus scrape config ──
+prometheus_scrape_interval: 15s
+prometheus_evaluation_interval: 15s
+
+# ── Secrets: khai báo trong vault.yml (mã hóa bằng ansible-vault) ──
+# grafana_admin_password: ...
