@@ -126,7 +126,7 @@ curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64
 sudo dpkg -i /tmp/ssm.deb
 ```
 
-## Deploy — Folder-based (Lab chính)
+## Deploy — Folder-based 
 
 ### Dev environment
 
@@ -174,7 +174,7 @@ terraform init
 terraform apply -auto-approve
 ```
 
-## Deploy — Workspace (Day 2 demo)
+## Deploy — Workspace
 
 ```bash
 cd terraform/live
