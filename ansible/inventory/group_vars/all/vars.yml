@@ -1,8 +1,12 @@
 # Group vars: monitoring
 # File: inventory/group_vars/all/vars.yml
-#
-# monitoring_host được truyền từ dòng lệnh:
-#   ansible-playbook ... -e "monitoring_host=$(terraform -chdir=terraform output -raw public_ip)"
+
+# ── SSH connection ──
+ansible_user: ubuntu
+ssh_key_path: "~/.ssh/techshop-key.pem"
+
+# ── VM (được override từ dòng lệnh khi chạy run.sh) ──
+monitoring_host: 127.0.0.1
 
 # ── Ports ──
 prometheus_port: 9090
