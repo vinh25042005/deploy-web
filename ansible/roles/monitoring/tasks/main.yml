@@ -9,7 +9,30 @@
     cache_valid_time: 3600
   become: yes
 
-# ── Step 2: Cài đặt packages ──
+# ── Step 2: Thêm APT repository cho Grafana ──
+- name: Install prerequisite packages
+  apt:
+    name:
+      - apt-transport-https
+      - software-properties-common
+      - wget
+    state: present
+  become: yes
+
+- name: Add Grafana GPG key
+  apt_key:
+    url: https://apt.grafana.com/gpg.key
+    state: present
+  become: yes
+
+- name: Add Grafana APT repository
+  apt_repository:
+    repo: "deb https://apt.grafana.com stable main"
+    state: present
+    update_cache: yes
+  become: yes
+
+# ── Step 3: Cài đặt packages ──
 - name: Install Prometheus, Grafana, Node Exporter
   apt:
     name: "{{ item }}"
@@ -54,6 +77,15 @@
     mode: "0644"
   become: yes
   notify: Restart Grafana
+
+- name: Ensure Grafana provisioning directories exist
+  file:
+    path: "{{ grafana_config_dir }}/provisioning/datasources"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+  become: yes
 
 - name: Deploy Grafana datasource (Prometheus)
   template:
@@ -105,6 +137,30 @@
   until: graf_status.status == 200
   retries: 10
   delay: 5
+
+# ── Step 7: Import Node Exporter dashboard ──
+- name: Download Node Exporter Full dashboard JSON
+  uri:
+    url: https://grafana.com/api/dashboards/1860/revisions/latest/download
+    return_content: yes
+  register: dashboard_json
+
+- name: Import dashboard vào Grafana
+  uri:
+    url: "http://localhost:{{ grafana_port }}/api/dashboards/db"
+    method: POST
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      dashboard: "{{ dashboard_json.json }}"
+      overwrite: true
+  register: import_result
+
+- name: Print dashboard URL
+  debug:
+    msg: "📊 Dashboard: http://{{ ansible_host }}:{{ grafana_port }}{{ import_result.json.url }}"
 
 - name: Print access info
   debug:
