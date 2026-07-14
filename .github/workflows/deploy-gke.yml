@@ -76,10 +76,15 @@ jobs:
 
       - name: Deploy Backend
         run: |
-          kubectl set image deployment/backend backend=$REGISTRY/backend:latest -n techshop
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "Deploying backend sha-${SHA}"
+          kubectl set image deployment/backend backend=$REGISTRY/backend:sha-${SHA} -n techshop
           kubectl rollout status deployment/backend -n techshop --timeout=120s
 
       - name: Deploy Frontend
         run: |
-          kubectl set image deployment/frontend frontend=$REGISTRY/frontend:latest -n techshop
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "Deploying frontend sha-${SHA}"
+          kubectl set image deployment/frontend frontend=$REGISTRY/frontend:sha-${SHA} -n techshop
           kubectl rollout status deployment/frontend -n techshop --timeout=120s
+          kubectl rollout restart deployment/frontend -n techshop
