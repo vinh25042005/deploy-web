@@ -6,12 +6,20 @@ terraform {
       version = "~> 5.0"
     }
   }
-  # S3 bucket + DynamoDB tạo 1 lần thủ công bằng AWS CLI
+  # S3 bucket + DynamoDB tạo 1 lần thủ công bằng AWS CLI:
+  #   aws s3api create-bucket --bucket techshop-tfstate --region ap-southeast-1 \
+  #     --create-bucket-configuration LocationConstraint=ap-southeast-1
+  #   aws s3api put-bucket-versioning --bucket techshop-tfstate --versioning-configuration Status=Enabled
+  #   aws dynamodb create-table --table-name techshop-tfstate-lock \
+  #     --attribute-definitions AttributeName=LockID,AttributeType=S \
+  #     --key-schema AttributeName=LockID,KeyType=HASH \
+  #     --billing-mode PAY_PER_REQUEST --region ap-southeast-1
   backend "s3" {
-    bucket  = "techshop-tfstate"
-    key     = "terraform.tfstate"
-    region  = "ap-southeast-1"
-    encrypt = true
+    bucket         = "techshop-tfstate"
+    key            = "terraform.tfstate"
+    region         = "ap-southeast-1"
+    encrypt        = true
+    dynamodb_table = "techshop-tfstate-lock"
   }
 }
 
@@ -27,11 +35,11 @@ locals {
   # Map config cho từng môi trường
   config = {
     dev = {
-      instance_type = "t3.small"
+      instance_type = "t3.medium"
       key_name      = "techshop-key"
     }
     stg = {
-      instance_type = "t3.medium"
+      instance_type = "t3.large"
       key_name      = "techshop-key"
     }
   }
@@ -62,8 +70,6 @@ module "compute" {
 
 # ── Kubernetes + Helm provider ──
 # Lấy kubeconfig từ SSM (được node-1 upload khi khởi tạo):
-#   aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig \
-#     --query Parameter.Value --output text | base64 -d | gzip -d > ~/.kube/techshop-config
 provider "kubernetes" {
   config_path = pathexpand(var.kubeconfig_path)
 }
@@ -73,7 +79,18 @@ provider "helm" {
   }
 }
 
-# ── LƯU Ý: Sau terraform apply, chạy 3 lệnh sau theo thứ tự ──
+# ── Rancher: EC2 riêng, nằm NGOÀI cụm K8s ──
+module "rancher" {
+  source = "../modules/rancher"
+
+  project_name    = var.project_name
+  rancher_subnet_id = module.network.public_subnet_a_id
+  vpc_id          = module.network.vpc_id
+  key_name        = local.config[local.env].key_name
+  instance_type   = "t3.medium"
+}
+
+# ──  Sau terraform apply, chạy 3 lệnh sau theo thứ tự ──
 #
 #   Bước 1: Cài K8s cluster bằng Ansible
 #     eval $(ssh-agent -s) && ssh-add ~/.ssh/techshop-key.pem

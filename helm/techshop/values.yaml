@@ -1,9 +1,8 @@
 namespace: techshop
 
 images:
-  # Khi build được image thật, đổi lại: ghcr.io/vinh25042005/deploy-web/backend:latest
-  backend: nginx:alpine
-  frontend: nginx:alpine
+  backend: ghcr.io/vinh25042005/deploy-web/backend:latest
+  frontend: ghcr.io/vinh25042005/deploy-web/frontend:latest
   postgres: postgres:16-alpine
 
 backend:
@@ -23,7 +22,7 @@ frontend:
     limits: { cpu: 500m, memory: 256Mi }
 
 postgres:
-  enabled: true
+  enabled: true        # Postgres in-cluster với backup S3
   replicas: 1
   port: 5432
   user: postgres
@@ -32,28 +31,39 @@ postgres:
   storage:
     size: 10Gi
     className: techshop-ssd-immediate
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"           # 6 giờ 1 lần
+    s3Bucket: techshop-loki-790400775134
+    s3Region: ap-southeast-1
 
 config:
   nodeEnv: production
   jwtExpiresIn: 7d
   frontendUrl: http://techshop.local
   backendInternalUrl: http://backend:3001
-  # Secrets below: override via env/values-secret.yaml (gitignored)
   jwtSecret: changeme
   databaseUrl: postgresql://postgres:password123@postgres:5432/shopdb?schema=public
 
 ingress:
   host: techshop.local
   tlsSecret: techshop-tls
-  nginx:
-    enabled: true
-    controller:
-      hostNetwork: true
-      kind: DaemonSet
-      daemonset:
-        useHostPort: true
-      service:
-        type: ClusterIP
+  tls:
+    enabled: true    # cert-manager + selfsigned ClusterIssuer
+
+# ─── cert-manager (tự động tạo & renew TLS certificate) ───
+cert-manager:
+  installCRDs: true
+
+# ─── NGINX Ingress Controller subchart ───
+ingress-nginx:
+  controller:
+    hostNetwork: true
+    kind: DaemonSet
+    daemonset:
+      useHostPort: true
+    service:
+      type: ClusterIP
 
 hpa:
   enabled: true
@@ -106,12 +116,6 @@ monitoring:
           node-exporter-full:
             gnetId: 1860
             datasource: Prometheus
-      additionalDataSources:
-        - name: Loki
-          type: loki
-          url: http://loki:3100
-          access: proxy
-          isDefault: false
 
     # ─── Node Exporter ───
     prometheus-node-exporter:
@@ -121,16 +125,32 @@ monitoring:
     kube-state-metrics:
       enabled: true
 
-  # ─── Loki (log aggregation) ───
+  # ─── Loki (log aggregation) — tắt vì OOM trên t3.medium ───
   loki:
-    enabled: true
-    url: http://loki:3100
+    enabled: false
 
   # ─── Promtail (log collector) ───
   promtail:
-    enabled: true
+    enabled: false
 
-# ─── Loki subchart: S3 storage config ───
+# ─── Promtail subchart: scrape pod labels vào Loki ───
+promtail:
+  config:
+    clients:
+      - url: http://techshop-dev-loki:3100/loki/api/v1/push
+    snippets:
+      extraRelabelConfigs:
+        - source_labels: [__meta_kubernetes_pod_label_app]
+          target_label: app
+          action: replace
+        - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          target_label: app
+          action: replace
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 256Mi }
+
+# ─── Loki subchart: SingleBinary + S3 storage, tối giản cho t3.medium ───
 loki:
   deploymentMode: SingleBinary
   loki:
@@ -153,3 +173,32 @@ loki:
           index:
             prefix: index_
             period: 24h
+    # Dùng in-memory cache thay vì memcached (tiết kiệm RAM)
+    query_range:
+      results_cache:
+        cache:
+          enable_fifocache: true
+          fifocache:
+            max_size_bytes: 50MB
+            validity: 5m
+    chunk_store_config:
+      chunk_cache_config:
+        enable_fifocache: true
+        fifocache:
+          max_size_bytes: 100MB
+          validity: 30m
+  # ─── TẮT memcached (ngốn 10GB RAM) ───
+  memcached:
+    chunkCache:
+      enabled: false
+    resultsCache:
+      enabled: false
+  # ─── Resources cho SingleBinary ───
+  singleBinary:
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+  # ─── AWS credentials từ EC2 instance profile ───
+  extraEnv:
+    - name: AWS_REGION
+      value: ap-southeast-1

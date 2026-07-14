@@ -13,6 +13,9 @@ spec:
         - podSelector:
             matchLabels:
               app: backend
+        - podSelector:
+            matchLabels:
+              app: postgres-backup
       ports:
         - port: {{ .Values.postgres.port }}
           protocol: TCP

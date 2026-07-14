@@ -14,7 +14,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: techshop-kube-prometheus-stack-grafana
+                name: {{ .Release.Name }}-grafana
                 port:
                   number: 80
 {{- end }}

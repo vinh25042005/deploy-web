@@ -1,3 +1,6 @@
+# Loki S3 storage config (standalone override file)
+# NOTE: Config này đã được tích hợp vào values.yaml.
+# File này giữ lại để dùng với -f nếu cần override riêng S3 config.
 loki:
   loki:
     auth_enabled: false
