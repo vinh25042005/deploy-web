@@ -1,0 +1,21 @@
+{{- if .Values.monitoring.enabled }}
+{{- if .Values.monitoring.loki.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-datasource-loki
+  namespace: {{ .Values.namespace }}
+  labels:
+    grafana_datasource: "1"
+    app.kubernetes.io/part-of: {{ .Release.Name }}
+stringData:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Loki
+      type: loki
+      url: http://{{ .Release.Name }}-loki:3100
+      access: proxy
+      isDefault: false
+{{- end }}
+{{- end }}

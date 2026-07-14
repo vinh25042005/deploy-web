@@ -16,6 +16,37 @@ spec:
       labels:
         app: postgres
     spec:
+      {{- if .Values.postgres.backup.enabled }}
+      initContainers:
+      - name: restore-from-s3
+        image: amazon/aws-cli:latest
+        env:
+        - name: S3_BUCKET
+          value: {{ .Values.postgres.backup.s3Bucket | quote }}
+        - name: AWS_REGION
+          value: {{ .Values.postgres.backup.s3Region | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          if [ -f /var/lib/postgresql/PG_VERSION ]; then
+            echo "Database exists, skipping restore"
+          else
+            echo "Fresh volume, checking S3..."
+            LATEST=$(aws s3 ls s3://$S3_BUCKET/ | grep '.sql.gz' | sort | tail -1 | awk '{print $4}')
+            if [ -n "$LATEST" ]; then
+              echo "Restoring from s3://$S3_BUCKET/$LATEST"
+              aws s3 cp s3://$S3_BUCKET/$LATEST /tmp/restore.sql.gz
+              gunzip -c /tmp/restore.sql.gz | psql -h localhost -U {{ .Values.postgres.user }} -d {{ .Values.postgres.database }}
+              echo "Restore complete!"
+            else
+              echo "No backup in S3, starting fresh"
+            fi
+          fi
+        volumeMounts:
+        - name: pgdata
+          mountPath: /var/lib/postgresql
+      {{- end }}
       containers:
         - name: postgres
           image: {{ .Values.images.postgres }}

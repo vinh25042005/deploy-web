@@ -34,6 +34,9 @@ COPY --from=build --chown=backend:backend /build/node_modules ./node_modules
 COPY --from=build --chown=backend:backend /build/package*.json ./
 COPY --from=build --chown=backend:backend /build/database ./database
 
+# Fix prisma schema path for container (dev uses ../, container uses ./)
+RUN sed -i 's|"../database/prisma|"database/prisma|g' package.json
+
 USER backend
 
 EXPOSE 3001

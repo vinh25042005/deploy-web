@@ -20,7 +20,6 @@ dependencies:
   - name: ingress-nginx
     version: "~4.11"
     repository: "https://kubernetes.github.io/ingress-nginx"
-    condition: ingress.nginx.enabled
   - name: aws-ebs-csi-driver
     version: "~2.37"
     repository: "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
@@ -29,3 +28,7 @@ dependencies:
     version: "~3.12"
     repository: "https://kubernetes-sigs.github.io/metrics-server"
     condition: hpa.enabled
+  - name: cert-manager
+    version: "~1.15"
+    repository: "https://charts.jetstack.io"
+    condition: ingress.tls.enabled

@@ -3,6 +3,10 @@ kind: Ingress
 metadata:
   name: techshop-ingress
   namespace: {{ .Values.namespace }}
+  {{- if .Values.ingress.tls.enabled }}
+  annotations:
+    cert-manager.io/cluster-issuer: techshop-selfsigned-issuer
+  {{- end }}
 spec:
   ingressClassName: nginx
   tls:

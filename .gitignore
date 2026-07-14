@@ -48,6 +48,10 @@ screenshots/
 terraform.tfvars
 **/terraform.tfvars
 
+# Ansible vault
+ansible/.vault_pass
+ansible/vars/secrets.yml
+
 # Helm secrets
 **/values-secret.yaml
 

@@ -9,3 +9,21 @@ config:
 
 ingress:
   host: stg.techshop.local
+
+# ─── Loki + Promtail cho staging ───
+monitoring:
+  loki:
+    enabled: true
+    url: http://techshop-stg-loki:3100
+  promtail:
+    enabled: true
+
+promtail:
+  config:
+    clients:
+      - url: http://techshop-stg-loki:3100/loki/api/v1/push
+
+loki:
+  extraEnv:
+    - name: AWS_REGION
+      value: ap-southeast-1

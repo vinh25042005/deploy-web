@@ -1,19 +1,14 @@
-output "k8s_node_ips" {
-  description = "K8s node private IPs"
-  value       = module.compute.node_private_ips
+output "ingress_public_ips" {
+  description = "Ingress node public IPs"
+  value       = module.compute.ingress_public_ips
 }
 
-output "k8s_node_ids" {
-  description = "K8s node instance IDs"
-  value       = module.compute.node_instance_ids
-}
-
-output "vpc_id" {
-  description = "VPC ID"
-  value       = module.network.vpc_id
+output "rancher_url" {
+  description = "Rancher URL"
+  value       = module.rancher.rancher_url
 }
 
 output "monitoring_grafana" {
-  description = "Grafana URL (port-forward after apply)"
+  description = "Grafana URL"
   value       = "kubectl port-forward -n techshop svc/techshop-dev-grafana 9999:80"
 }

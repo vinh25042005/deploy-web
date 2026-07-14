@@ -43,6 +43,14 @@
   register: join_result
   changed_when: "'This node has joined the cluster' in join_result.stdout"
 
+- name: Untaint self (control-plane nodes mới join vẫn bị taint)
+  shell: |
+    NODE_NAME=$(hostname)
+    kubectl taint node $NODE_NAME node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
+  when: node_type == 'master'
+  delegate_to: "{{ groups['master'][0] }}"
+  changed_when: false
+
 - name: Label ingress node
   shell: |
     NODE_NAME=$(hostname)
