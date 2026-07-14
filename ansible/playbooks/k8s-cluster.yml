@@ -1,0 +1,34 @@
+---
+# Playbook: Cài đặt Kubernetes cluster (kubeadm)
+# Chạy sau khi Terraform tạo xong EC2 instances
+#
+# Usage:
+#   ansible-playbook -i inventory.yml playbooks/k8s-cluster.yml
+# ===============================================================
+
+- name: Prepare all K8s nodes (containerd + kubeadm + kubectl + kubelet)
+  hosts: k8s_cluster
+  become: yes
+  roles:
+    - common
+
+- name: Initialize master node (kubeadm init + Calico + upload SSM)
+  hosts: master
+  become: yes
+  serial: 1
+  roles:
+    - master
+
+- name: Join additional control-plane nodes
+  hosts: workers
+  become: yes
+  serial: 1
+  roles:
+    - worker
+
+- name: Join ingress/worker nodes
+  hosts: ingress
+  become: yes
+  serial: 1
+  roles:
+    - worker

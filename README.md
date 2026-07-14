@@ -1,184 +1,180 @@
-## Task: `Deploy to Google Cloud`
+# Task: Kube-Prometheus-Stack (Monitoring) trên AWS K8s
 
-- **Intern**: `Nguyễn Quang Vinh`
-- **Phase / Week / Day**: `Phase 1 / Week 3 / Day 3`
-- **Branch**: `phase-1/week-3/day-3-deploy-to-google-cloud`
-- **Submitted at**: `2026-07-05 17:00` (UTC+7)
-- **Time spent**: `~10h`
-- **Phase 2**: HTTPS Load Balancer (branch `phase-2/week-3/day-3-https-monitoring`)
+- **Intern**: Nguyễn Quang Vinh
+- **Phase / Week / Day**: `Phase 2 / Week 3 / Day 4`
+- **Branch**: `phase-2/week-3/day-4-monitoring`
+- **Submitted at**: `2026-07-14 01:00` (UTC+7)
+- **Time spent**: `~8h`
 
 ## 1. Mục tiêu
 
-Triển khai web (Next.js + Express + PostgreSQL) lên GCP với hạ tầng: VPC, HTTPS, CI/CD, bảo mật IAP, remote state.
+Triển khai **Prometheus + Grafana + Loki** lên K8s cluster (AWS EC2) dùng **kube-prometheus-stack** Helm chart, có preload dashboard Grafana, custom alert, và ingress cho monitoring.
 
-## 2. Kiến trúc triển khai
+## 2. Cách chạy
 
-### 2.1. Sơ đồ tổng quan
+### Yêu cầu
+- AWS credentials (default profile)
+- SSH key `~/.ssh/techshop-key.pem`
+- Terraform v1.5+, Ansible, Helm, kubectl
+
+### Luồng đầy đủ
+
+```bash
+# ─── Bước 1: Hạ tầng ───────────────────────────────
+cd terraform/live
+terraform apply -auto-approve
+
+# ─── Bước 2: SSH agent ──────────────────────────────
+eval $(ssh-agent -s) && ssh-add ~/.ssh/techshop-key.pem
+
+# ─── Bước 3: Ansible — K8s cluster ──────────────────
+cd ../../ansible
+ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml
+
+# ─── Bước 4: Kubeconfig ─────────────────────────────
+aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig \
+  --query Parameter.Value --output text | base64 -d | gzip -d > ~/.kube/techshop-config
+export KUBECONFIG=~/.kube/techshop-config
+kubectl get nodes   # 5 node Ready
+
+# ─── Bước 5: Deploy monitoring ──────────────────────
+cd ../helm/techshop
+helm dependency update
+kubectl create ns techshop --dry-run=client -o yaml | kubectl apply -f -
+helm upgrade --install techshop-dev . --namespace techshop \
+  --set backend.enabled=false \
+  --set frontend.enabled=false \
+  --set postgres.enabled=false \
+  --set hpa.enabled=false \
+  --set monitoring.enabled=true \
+  --set monitoring.loki.enabled=false \
+  --set monitoring.promtail.enabled=false
+
+# ─── Bước 6: Kiểm tra ───────────────────────────────
+kubectl get pods -n techshop
+```
+
+### Truy cập
+
+```bash
+# Grafana
+kubectl port-forward -n techshop svc/techshop-dev-grafana 9999:80
+# → http://localhost:9999 (admin/admin123)
+
+# Prometheus
+kubectl port-forward -n techshop svc/techshop-dev-kube-promethe-prometheus 9090:9090
+# → http://localhost:9090
+
+# Alertmanager
+kubectl port-forward -n techshop svc/techshop-dev-kube-promethe-alertmanager 9093:9093
+# → http://localhost:9093
+```
+
+## 3. Kết quả
+
+| Component | Status | Ghi chú |
+|-----------|--------|---------|
+| Prometheus | ✅ | Retention 7d / 5GB, scrape tự động |
+| Grafana | ✅ | admin/admin123, dashboard Node Exporter Full (ID 1860) |
+| Alertmanager | ✅ | PodRestartHigh alert custom |
+| kube-state-metrics | ✅ | Metrics objects K8s |
+| Node Exporter | ✅ | 5 node, port 9100 |
+| Loki | ⏸️ | Disabled mặc định (cần S3 bucket) |
+| ingress-nginx | ✅ | hostNetwork, sẵn sàng route |
+| Dashboard preload | ✅ | Sidecar tự động import ConfigMap có label `grafana_dashboard: "1"` |
+
+## 4. Khó khăn & cách giải quyết
+
+| # | Vấn đề | Nguyên nhân | Cách fix |
+|---|--------|------------|----------|
+| 1 | PVC postgres không Bound | EBS CSI driver thiếu IAM permissions (`ec2:CreateVolume`) | Thêm EBS permissions vào IAM role `techshop-node-ssm-role` |
+| 2 | PVC Pending mãi | `volumeBindingMode: WaitForFirstConsumer` gây node affinity mismatch | Tạo StorageClass `techshop-ssd-immediate` với `volumeBindingMode: Immediate` |
+| 3 | Prometheus 0/0 targets up | ServiceMonitor không match được | Set `serviceMonitorSelectorNilUsesHelmValues: false` |
+| 4 | Helm release stuck pending | Lỗi PVC → helm fail → không retry được | `helm delete` → `helm install` lại |
+| 5 | Grafana dashboard không load | Sidecar chưa kịp quét ConfigMap | Đợi 1-2 phút, Grafana sidecar tự động import |
+| 6 | Loki install fail | Chart yêu cầu `storage.bucketNames.chunks` | Tạm thời disable Loki, cấu hình sau |
+
+## 5. Kiến trúc
 
 ```mermaid
 flowchart TB
-    subgraph Internet["🌐 Internet"]
-        User["👤 Người dùng"]
-        Bad["👾 Attacker"]
+    subgraph Monitoring["📊 Monitoring Stack (kube-prometheus-stack)"]
+        PO["Prometheus Operator"]
+        Prom["Prometheus :9090"]
+        Graf["Grafana :80"]
+        Alert["Alertmanager :9093"]
+        KSM["kube-state-metrics :8080"]
+        NE["node-exporter :9100 (×5)"]
     end
 
-    LB["🔒 HTTPS Load Balancer<br/>Global IP: 8.233.56.51<br/>SSL (self-signed)<br/>HTTP → HTTPS redirect"]
-
-    subgraph GCP["☁️ GCP: techshop-prod-2026"]
-        subgraph VPC["🔒 VPC: techshop-vpc (10.20.0.0/16)"]
-            
-            subgraph SubnetA["Subnet A: 10.20.1.0/24 (asia-southeast1-a)"]
-                FW["🛡️ Firewall Rules"]
-                Frontend["🖥️ shop-frontend<br/>e2-micro · Next.js<br/>🔒 Internal: 10.20.1.5:3000<br/>Proxy /api/* → backend"]
-                Backend["⚙️ shop-backend<br/>e2-small · Express<br/>🔒 Internal: 10.20.1.6:3001"]
-                DB["🗄️ shop-db<br/>e2-small · PostgreSQL 16<br/>🔒 Internal: 10.20.1.2:5432<br/>Disk: 20GB persistent"]
-            end
-
-            subgraph SubnetB["Subnet B: 10.20.2.0/24 (dự phòng HA)"]
-                Empty["(trống - sẵn sàng mở rộng)"]
-            end
-
-            NAT["🌍 Cloud NAT<br/>+ Cloud Router"]
-        end
-
-        AR["📦 Artifact Registry<br/>backend + frontend images"]
-        GCS["🪣 GCS Bucket<br/>Terraform state"]
+    subgraph Targets["🎯 Targets"]
+        K8sAPI["kube-apiserver"]
+        Kubelet["kubelet"]
+        Pods["application pods"]
     end
 
-    subgraph GitHub[" GitHub Actions"]
-        CI["CI Pipeline<br/>lint → test → build → scan"]
-        CD["Deploy Pipeline<br/>SSH IAP → pull → run"]
+    subgraph Dashboards["📈 Preloaded"]
+        D1["Node Exporter Full (ID 1860)"]
     end
 
-    %% User flow: HTTPS qua LB → frontend nội bộ
-    User -->|"HTTPS :443 ✅"| LB
-    LB -->|"TCP :3000 ✅<br/>allow-frontend<br/>(LB health check IPs)"| Frontend
-    
-    %% Frontend proxy /api/* sang backend nội bộ
-    Frontend -->|"/api/* proxy<br/>TCP :3001 ✅<br/>allow-backend<br/>(source: shop-frontend)"| Backend
-    Backend -->|"TCP :5432 ✅<br/>allow-postgres<br/>(source: shop-backend)"| DB
-
-    %% Blocked
-    Bad -.->|"Frontend :3000 🚫<br/>chỉ LB được phép"| FW
-    Bad -.->|"Backend :3001 🚫<br/>KHÔNG public IP"| FW
-    Bad -.->|"SSH :22 🚫<br/>chỉ IAP"| FW
-    Bad -.->|"DB :5432 🚫<br/>bị chặn"| FW
-
-    %% Outbound
-    DB -->|"pull image"| NAT
-    Backend -->|"pull image"| NAT
-    Frontend -->|"pull image"| NAT
-    NAT -->|"outbound"| AR
-
-    %% CI/CD
-    CI -->|"push image"| AR
-    CD -->|"SSH qua IAP 🔑"| Backend
-    CD -->|"SSH qua IAP 🔑"| Frontend
-
-    %% State
-    CD -.->|"state"| GCS
-
-    %% Styles
-    style Internet fill:#e1f5fe,stroke:#0288d1
-    style VPC fill:#fff3e0,stroke:#e65100
-    style SubnetA fill:#f5f5f5,stroke:#9e9e9e
-    style SubnetB fill:#fafafa,stroke:#bdbdbd,stroke-dasharray: 5 5
-    style LB fill:#bbdefb,stroke:#1565c0
-    style Frontend fill:#c8e6c9,stroke:#2e7d32
-    style Backend fill:#ffcdd2,stroke:#c62828
-    style DB fill:#ffcdd2,stroke:#c62828
-    style FW fill:#fff9c4,stroke:#f9a825
-    style GitHub fill:#e8eaf6,stroke:#283593
+    PO --> Prom
+    PO --> Alert
+    PO --> Graf
+    Prom -->|scrape| K8sAPI
+    Prom -->|scrape| Kubelet
+    Prom -->|scrape| NE
+    Graf -->|query| Prom
+    Graf -->|sidecar import| D1
 ```
 
-## 3. Cách chạy 
+## 6. Cấu hình chi tiết
 
-```bash
-# 1. Clone repo
-git clone https://github.com/vinh25042005/deploy-web.git
-cd deploy-web
-
-# 2. Sinh secret ngẫu nhiên
-openssl rand -hex 64          # → JWT_SECRET
-openssl rand -base64 24       # → DB_PASSWORD
-
-# 3. Tạo file .env (đã gitignored)
-cp .env.example .env
-# → điền JWT_SECRET, DB_PASSWORD, DB_USER, DB_NAME
-
-# 4. Tạo terraform.tfvars (đã gitignored)
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# → điền db_password, db_user, db_name
-
-# 5. Bật IAP API + cấp quyền
-gcloud services enable iap.googleapis.com
-gcloud projects add-iam-policy-binding techshop-prod-2026 \
-  --member="serviceAccount:terraform-sa@..." \
-  --role="roles/iap.tunnelResourceAccessor"
-
-# 6. Deploy hạ tầng lên GCP
-terraform init
-terraform apply
-
-# 7. Thêm GitHub Secrets + Variables
-# Repo → Settings → Secrets and variables → Actions
-# Secrets:  JWT_SECRET, DB_USER, DB_PASSWORD, DB_NAME, GCP_SA_KEY
-# Variables: GCP_PROJECT_ID, LB_IP, DB_INTERNAL_IP, BACKEND_INTERNAL_URL
-
-# 8. SSH vào DB VM, khởi động postgres + đổi mật khẩu
-gcloud compute ssh deploy@shop-db --zone=asia-southeast1-a --tunnel-through-iap
-sudo systemctl start docker
-sudo docker run -d --name postgres ... postgres:16-alpine
-sudo docker exec postgres psql -U postgres -c "ALTER USER postgres PASSWORD '...'"
-
-# 9. SSH vào backend VM, pull image + migrate + seed
-gcloud compute ssh deploy@shop-backend --zone=asia-southeast1-a --tunnel-through-iap
-sudo docker pull <registry>/backend:latest
-sudo docker run -d --name backend ... <registry>/backend:latest
-sudo docker exec backend npx prisma migrate deploy
-sudo docker exec backend npx tsx database/seed.ts
-
-# 10. SSH vào frontend VM, pull image
-gcloud compute ssh deploy@shop-frontend --zone=asia-southeast1-a --tunnel-through-iap
-sudo docker pull <registry>/frontend:latest
-sudo docker run -d --name frontend ... <registry>/frontend:latest
-
-# 11. Fix quyền docker cho CI
-sudo usermod -aG docker deploy   # trên cả backend + frontend VM
-
-# 12. Push code → CI tự build, test, scan → Deploy tự chạy
-git push
-
-# 13. Verify
-curl -k https://8.233.56.51                    # HTTPS Load Balancer
-curl -I http://8.233.56.51                     # HTTP → 301 redirect đến HTTPS
+### values.yaml (phần monitoring)
+```yaml
+monitoring:
+  enabled: true
+  kube-prometheus-stack:
+    alertmanager:
+      enabled: false
+    prometheus:
+      prometheusSpec:
+        retention: 7d
+        retentionSize: 5GB
+        serviceMonitorSelectorNilUsesHelmValues: false
+    grafana:
+      adminPassword: admin123
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+      dashboards:
+        default:
+          node-exporter-full:
+            gnetId: 1860
+            datasource: Prometheus
 ```
 
-## 4. Kết quả
+### Custom PrometheusRule
+```yaml
+- alert: PodRestartHigh
+  expr: rate(kube_pod_container_status_restarts_total{namespace="techshop"}[10m]) * 600 > 3
+  for: 1m
+  labels:
+    severity: warning
+```
 
-| Thành phần | Địa chỉ |
-|-----------|---------|
-| Website (HTTPS) | https://8.233.56.51 |
-| HTTP redirect | http://8.233.56.51 → 301 → HTTPS |
-| API (qua proxy) | https://8.233.56.51/api |
-| Backend (internal) | 10.20.1.6:3001 (chỉ frontend + LB nối được) |
-| Health Check | SSH backend → `curl localhost:3001/api/health` |
-| Load Balancer IP | 8.233.56.51 |
+## 7. Reference
 
-## 5. Khó khăn & cách giải quyết
+- [kube-prometheus-stack Helm chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
+- [Grafana dashboard ID 1860 - Node Exporter Full](https://grafana.com/grafana/dashboards/1860)
+- [Báo cáo chi tiết](./REPORT-kube-prometheus-stack.md)
 
-- **DB mất sau terraform apply** → Tách persistent disk riêng `shop-db-data`, mount `/data/postgres`
-- **TypeScript build fail (JWT_SECRET string|undefined)** → Dùng `requireEnv()` throw error thay vì `process.exit()`
-- **Docker permission denied trong CI** → `usermod -aG docker deploy` trong startup script
-- **Artifact Registry auth trên VM** → Set IAM `allUsers: artifactregistry.reader`
-- **Backend lộ public IP** → Next.js rewrites proxy `/api/*` → backend chỉ còn internal IP
-- **Frontend lộ public IP, HTTP** → HTTPS Load Balancer + HTTP→HTTPS redirect → frontend internal-only, firewall chỉ LB
-- **Backend IP thay đổi sau apply** → Dùng GitHub Variables, cập nhật sau mỗi lần apply
+## 8. Self-check
 
-## 6. Self-check
-- [x] Code chạy được trên máy sạch (`terraform apply` + CI tự deploy)
+- [x] Code chạy được trên máy sạch (destroy → apply → ansible → helm)
 - [x] README có hướng dẫn run lại
-- [x] Không hard-code secret (dùng GitHub Secrets + `.env` gitignored)
-- [x] Commit message rõ ràng
-- [x] Đã review lại code 1 lượt
+- [x] Không hard-code secret (dùng Helm values)
+- [x] Dashboard preload hoạt động (Node Exporter Full)
+- [x] Custom alert PodRestartHigh hoạt động
+- [x] Monitoring tách biệt khỏi app (backend.enabled=false)
+- [ ] Loki cần S3 bucket — chưa bật default

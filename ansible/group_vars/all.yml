@@ -1,0 +1,4 @@
+---
+# Global variables for K8s cluster
+k8s_version: "1.32"
+pod_cidr: "10.244.0.0/16"

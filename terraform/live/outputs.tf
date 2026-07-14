@@ -13,12 +13,7 @@ output "vpc_id" {
   value       = module.network.vpc_id
 }
 
-output "k8s_app_release_name" {
-  description = "Helm release name"
-  value       = module.k8s_app.release_name
-}
-
-output "k8s_app_endpoint" {
-  description = "TechShop service endpoint"
-  value       = module.k8s_app.service_endpoint
+output "monitoring_grafana" {
+  description = "Grafana URL (port-forward after apply)"
+  value       = "kubectl port-forward -n techshop svc/techshop-dev-grafana 9999:80"
 }

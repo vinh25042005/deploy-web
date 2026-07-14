@@ -10,23 +10,26 @@ variable "env" {
 
 variable "backend_image" {
   type        = string
-  description = "Docker image cho backend"
+  description = "Docker image cho backend (không dùng khi chỉ deploy monitoring)"
+  default     = "nginx:alpine"
 }
 
 variable "frontend_image" {
   type        = string
-  description = "Docker image cho frontend"
+  description = "Docker image cho frontend (không dùng khi chỉ deploy monitoring)"
+  default     = "nginx:alpine"
 }
 
 variable "replicas" {
   type        = number
   description = "Số replicas cho backend + frontend"
-  default     = 2
+  default     = 0
 }
 
 variable "ingress_host" {
   type        = string
-  description = "Ingress hostname (VD: dev.techshop.local)"
+  description = "Ingress hostname"
+  default     = "dev.techshop.local"
 }
 
 variable "chart_path" {

@@ -1,4 +1,4 @@
-name: Deploy to GKE
+name: Deploy to K8s (AWS)
 on:
   workflow_run:
     workflows: ["CI"]
@@ -6,28 +6,73 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop
+  REGISTRY: ghcr.io/vinh25042005/deploy-web
 
 jobs:
-  deploy-gke:
+  # ─── Verify cosign signatures before deploy ──────────
+  verify-signatures:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
+    permissions:
+      id-token: write
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Auth GCP
-        uses: google-github-actions/auth@v2
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup gcloud + kubectl
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Verify backend signature
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ env.REGISTRY }}/backend:latest" \
+            || (echo "❌ Backend image NOT signed — rejecting deploy!" && exit 1)
 
-      - name: Install gke-gcloud-auth-plugin
-        run: gcloud components install gke-gcloud-auth-plugin --quiet
+      - name: Verify frontend signature
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ env.REGISTRY }}/frontend:latest" \
+            || (echo "❌ Frontend image NOT signed — rejecting deploy!" && exit 1)
 
-      - name: Get GKE credentials
-        run: gcloud container clusters get-credentials techshop-gke --zone=asia-southeast1-a
+  # ─── Deploy to K8s ───────────────────────────────────
+  deploy-k8s:
+    needs: verify-signatures
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup SSH and Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          # Lấy kubeconfig từ AWS SSM Parameter Store
+          aws ssm get-parameter --region ap-southeast-1 \
+            --name /k8s/kubeconfig --query Parameter.Value --output text | \
+            base64 -d | gzip -d > ~/.kube/config
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-1
 
       - name: Deploy Backend
         run: |

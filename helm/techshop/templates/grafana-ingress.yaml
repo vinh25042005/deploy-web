@@ -1,0 +1,20 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: {{ .Values.namespace }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grafana.techshop.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: techshop-kube-prometheus-stack-grafana
+                port:
+                  number: 80
+{{- end }}

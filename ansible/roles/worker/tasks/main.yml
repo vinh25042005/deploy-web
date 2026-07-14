@@ -1,0 +1,64 @@
+---
+# Role: worker — Join K8s cluster (control-plane hoặc worker)
+# Biến node_type quyết định cách join:
+#   node_type = "master"   → join --control-plane (cho node-2, node-3)
+#   node_type = "ingress"  → join worker + label role=ingress
+# ====================================================================
+
+- name: Get AWS region
+  shell: curl -s http://169.254.169.254/latest/meta-data/placement/region
+  register: aws_region
+  changed_when: false
+
+- name: Wait for join command from SSM
+  shell: |
+    for i in $(seq 1 30); do
+      {% if node_type == 'master' %}
+      CMD=$(aws ssm get-parameter --name "/k8s/join-command" \
+        --query Parameter.Value --output text --region {{ aws_region.stdout }} 2>/dev/null)
+      {% else %}
+      CMD=$(aws ssm get-parameter --name "/k8s/worker-join-command" \
+        --query Parameter.Value --output text --region {{ aws_region.stdout }} 2>/dev/null)
+      {% endif %}
+      if [ -n "$CMD" ] && [ "$CMD" != "None" ]; then
+        echo "$CMD"
+        exit 0
+      fi
+      sleep 10
+    done
+    echo "TIMEOUT"
+    exit 1
+  register: join_cmd
+  changed_when: false
+
+- name: Join cluster
+  shell: |
+    {% if node_type == 'master' %}
+    {{ join_cmd.stdout }}
+    {% else %}
+    {{ join_cmd.stdout }}
+    {% endif %}
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  register: join_result
+  changed_when: "'This node has joined the cluster' in join_result.stdout"
+
+- name: Label ingress node
+  shell: |
+    NODE_NAME=$(hostname)
+    kubectl label node $NODE_NAME role=ingress --overwrite
+  when: node_type == 'ingress'
+  delegate_to: "{{ groups['master'][0] }}"
+  changed_when: false
+
+- name: Setup kubeconfig (for control-plane nodes)
+  shell: |
+    mkdir -p $HOME/.kube
+    cp /etc/kubernetes/admin.conf $HOME/.kube/config
+    chown $(id -u):$(id -g) $HOME/.kube/config
+  when: node_type == 'master'
+  changed_when: false
+
+- name: Announce join result
+  debug:
+    msg: ">>> [{{ node_type | upper }}] Joined cluster successfully!"

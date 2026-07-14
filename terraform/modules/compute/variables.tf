@@ -48,3 +48,16 @@ variable "kubernetes_version" {
   default = "1.35"
 
 }
+# ── Ingress nodes ──
+variable "ingress_subnet_ids" {
+  type    = list(string)
+  default = []
+}
+variable "ingress_sg_ids" {
+  type    = list(string)
+  default = []
+}
+variable "ingress_count" {
+  type    = number
+  default = 2
+}

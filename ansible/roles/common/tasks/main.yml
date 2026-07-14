@@ -1,0 +1,109 @@
+---
+# Role: common — Cài containerd, kubeadm, kubectl, kubelet trên tất cả node
+# ======================================================================
+
+- name: Replace apt mirror with global archive (avoid 503 from regional mirrors)
+  shell: |
+    sed -i 's|http://[^.]*\.ec2\.archive\.ubuntu\.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+    apt-get update -qq
+  changed_when: false
+
+- name: Disable swap
+  shell: |
+    swapoff -a
+    sed -i '/swap/d' /etc/fstab
+  changed_when: false
+
+- name: Load kernel modules for containerd
+  copy:
+    dest: /etc/modules-load.d/containerd.conf
+    content: |
+      overlay
+      br_netfilter
+  notify: restart containerd
+
+- name: Load kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Set sysctl for Kubernetes networking
+  copy:
+    dest: /etc/sysctl.d/99-kubernetes-cri.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.ipv4.ip_forward = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+
+- name: Apply sysctl
+  shell: sysctl --system
+  changed_when: false
+
+- name: Install containerd
+  apt:
+    name: containerd
+    state: present
+    update_cache: yes
+
+- name: Configure containerd (SystemdCgroup)
+  shell: |
+    mkdir -p /etc/containerd
+    containerd config default > /etc/containerd/config.toml
+    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  notify: restart containerd
+
+- name: Ensure containerd is running
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+
+- name: Install apt-transport-https, ca-certificates, curl, gpg
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    state: present
+
+- name: Add Kubernetes apt key
+  shell: |
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key" | \
+      gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes apt repository
+  copy:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    content: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /"
+
+- name: Install kubeadm, kubectl, kubelet, awscli
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+      - awscli
+    state: present
+    update_cache: yes
+
+- name: Hold kubeadm, kubectl, kubelet
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubeadm
+    - kubectl
+    - kubelet
+
+- name: Enable kubelet
+  systemd:
+    name: kubelet
+    enabled: yes

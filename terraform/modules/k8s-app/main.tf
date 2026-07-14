@@ -1,36 +1,31 @@
-# Module: k8s-app — Deploy TechShop app lên K8s cluster bằng Helm
+# Module: k8s-app — Deploy monitoring stack lên K8s cluster bằng Helm
 resource "helm_release" "app" {
   name             = "${var.project_name}-${var.env}"
   chart            = var.chart_path
   namespace        = var.namespace
   create_namespace = true
-  wait             = true
-  timeout          = 600
+  wait             = false
+  timeout          = 300
 
   set = [
     {
-      name  = "images.backend"
-      value = var.backend_image
-      type  = "string"
-    },
-    {
-      name  = "images.frontend"
-      value = var.frontend_image
-      type  = "string"
-    },
-    {
       name  = "backend.replicas"
-      value = var.replicas
+      value = "0"
       type  = "string"
     },
     {
       name  = "frontend.replicas"
-      value = var.replicas
+      value = "0"
       type  = "string"
     },
     {
-      name  = "ingress.host"
-      value = var.ingress_host
+      name  = "postgres.replicas"
+      value = "0"
+      type  = "string"
+    },
+    {
+      name  = "hpa.enabled"
+      value = "false"
       type  = "string"
     },
   ]

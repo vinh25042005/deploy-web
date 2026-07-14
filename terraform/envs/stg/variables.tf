@@ -15,12 +15,12 @@ variable "kubeconfig_path" {
 
 variable "backend_image" {
   type    = string
-  default = "asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/backend:latest"
+  default = "ghcr.io/vinh25042005/deploy-web/backend:latest"
 }
 
 variable "frontend_image" {
   type    = string
-  default = "asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/frontend:latest"
+  default = "ghcr.io/vinh25042005/deploy-web/frontend:latest"
 }
 
 variable "replicas" {

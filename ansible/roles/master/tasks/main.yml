@@ -1,0 +1,109 @@
+---
+# Role: master — Khởi tạo cluster với kubeadm init + Calico + upload SSM
+# ====================================================================
+
+- name: Get private IP
+  shell: hostname -I | awk '{print $1}'
+  register: my_ip
+  changed_when: false
+
+- name: Get public IP (retry, may not be available immediately)
+  shell: curl -s http://169.254.169.254/latest/meta-data/public-ipv4
+  register: public_ip_raw
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: public_ip_raw.stdout != ""
+
+- name: Set IP facts
+  set_fact:
+    master_private_ip: "{{ my_ip.stdout }}"
+    master_public_ip: "{{ public_ip_raw.stdout }}"
+
+- name: Get AWS region
+  shell: curl -s http://169.254.169.254/latest/meta-data/placement/region
+  register: aws_region
+  changed_when: false
+
+- name: Delete old SSM parameters (avoid stale data)
+  shell: |
+    aws ssm delete-parameter --name "/k8s/join-command" --region {{ aws_region.stdout }} 2>/dev/null || true
+    aws ssm delete-parameter --name "/k8s/worker-join-command" --region {{ aws_region.stdout }} 2>/dev/null || true
+    aws ssm delete-parameter --name "/k8s/kubeconfig" --region {{ aws_region.stdout }} 2>/dev/null || true
+  changed_when: false
+
+- name: Run kubeadm init
+  shell: |
+    kubeadm init \
+      --control-plane-endpoint={{ master_private_ip }}:6443 \
+      --apiserver-advertise-address={{ master_private_ip }} \
+      --apiserver-cert-extra-sans={{ master_public_ip }} \
+      --pod-network-cidr={{ pod_cidr | default('10.244.0.0/16') }} \
+      --upload-certs \
+      --kubernetes-version=v{{ k8s_version }}.0 2>&1 | tee /tmp/kubeadm-init.log
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: Setup kubeconfig for ubuntu user
+  shell: |
+    mkdir -p $HOME/.kube
+    cp /etc/kubernetes/admin.conf $HOME/.kube/config
+    chown $(id -u):$(id -g) $HOME/.kube/config
+  changed_when: false
+
+- name: Patch kubeconfig with public IP (for remote access)
+  shell: |
+    sed -i "s/{{ master_private_ip }}/{{ master_public_ip }}/g" $HOME/.kube/config
+  changed_when: false
+
+- name: Install Calico CNI
+  shell: |
+    kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+  register: calico_result
+  changed_when: "'created' in calico_result.stdout"
+
+- name: Untaint master nodes (allow workload scheduling)
+  shell: |
+    kubectl taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
+  changed_when: false
+
+- name: Wait for Calico to be ready
+  shell: |
+    kubectl wait --for=condition=ready pod -l k8s-app=calico-node -n kube-system --timeout=120s
+  changed_when: false
+
+- name: Create join command for control-plane
+  shell: |
+    JOIN_CMD=$(kubeadm token create --print-join-command)
+    CERT_KEY=$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1)
+    echo "$JOIN_CMD --control-plane --certificate-key $CERT_KEY"
+  register: cp_join_cmd
+  changed_when: false
+
+- name: Create join command for workers
+  shell: kubeadm token create --print-join-command
+  register: worker_join_cmd
+  changed_when: false
+
+- name: Upload join commands to SSM Parameter Store
+  shell: |
+    aws ssm put-parameter --name "/k8s/join-command" \
+      --value "{{ cp_join_cmd.stdout }}" \
+      --type String --overwrite --region {{ aws_region.stdout }}
+    aws ssm put-parameter --name "/k8s/worker-join-command" \
+      --value "{{ worker_join_cmd.stdout }}" \
+      --type String --overwrite --region {{ aws_region.stdout }}
+  changed_when: false
+
+- name: Upload kubeconfig to SSM (gzip+base64, Advanced tier)
+  shell: |
+    KUBECONFIG_B64=$(cat $HOME/.kube/config | gzip | base64 -w0)
+    aws ssm put-parameter --name "/k8s/kubeconfig" --value "$KUBECONFIG_B64" \
+      --tier Advanced --type String --overwrite --region {{ aws_region.stdout }}
+  changed_when: false
+
+# ── EBS CSI + StorageClass + Ingress: Đã chuyển vào Helm chart (dependencies) ──
+
+- name: Announce completion
+  debug:
+    msg: ">>> [MASTER] Cluster initialized! API: https://{{ master_public_ip }}:6443"

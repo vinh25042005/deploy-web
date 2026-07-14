@@ -1,11 +1,13 @@
 namespace: techshop
 
 images:
-  backend: asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/backend:latest
-  frontend: asia-southeast1-docker.pkg.dev/techshop-prod-2026/techshop/frontend:latest
+  # Khi build được image thật, đổi lại: ghcr.io/vinh25042005/deploy-web/backend:latest
+  backend: nginx:alpine
+  frontend: nginx:alpine
   postgres: postgres:16-alpine
 
 backend:
+  enabled: true
   replicas: 2
   port: 3001
   resources:
@@ -13,6 +15,7 @@ backend:
     limits: { cpu: 500m, memory: 256Mi }
 
 frontend:
+  enabled: true
   replicas: 2
   port: 3000
   resources:
@@ -20,6 +23,7 @@ frontend:
     limits: { cpu: 500m, memory: 256Mi }
 
 postgres:
+  enabled: true
   replicas: 1
   port: 5432
   user: postgres
@@ -27,12 +31,12 @@ postgres:
   database: shopdb
   storage:
     size: 10Gi
-    className: techshop-ssd
+    className: techshop-ssd-immediate
 
 config:
   nodeEnv: production
   jwtExpiresIn: 7d
-  frontendUrl: https://8.233.56.51
+  frontendUrl: http://techshop.local
   backendInternalUrl: http://backend:3001
   # Secrets below: override via env/values-secret.yaml (gitignored)
   jwtSecret: changeme
@@ -41,9 +45,111 @@ config:
 ingress:
   host: techshop.local
   tlsSecret: techshop-tls
+  nginx:
+    enabled: true
+    controller:
+      hostNetwork: true
+      kind: DaemonSet
+      daemonset:
+        useHostPort: true
+      service:
+        type: ClusterIP
 
 hpa:
   enabled: true
   minReplicas: 2
   maxReplicas: 5
   targetCPU: 50
+
+# ─── Storage ───
+storage:
+  ebsCSI:
+    enabled: true
+
+# ─── Metrics Server (cho HPA) ───
+metrics-server:
+  args:
+    - --kubelet-insecure-tls
+
+monitoring:
+  enabled: true
+
+  # ─── kube-prometheus-stack (Prometheus + Grafana + Alertmanager) ───
+  kube-prometheus-stack:
+    alertmanager:
+      enabled: false
+
+    # ─── Prometheus ───
+    prometheus:
+      prometheusSpec:
+        retention: 7d
+        retentionSize: 5GB
+        resources:
+          requests: { cpu: 200m, memory: 512Mi }
+          limits:   { cpu: 500m, memory: 1Gi }
+        # Cho phép chọn ServiceMonitor từ mọi namespace
+        serviceMonitorSelectorNilUsesHelmValues: false
+
+    # ─── Grafana ───
+    grafana:
+      adminPassword: admin123
+      service:
+        type: ClusterIP
+        port: 80
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+      dashboards:
+        default:
+          node-exporter-full:
+            gnetId: 1860
+            datasource: Prometheus
+      additionalDataSources:
+        - name: Loki
+          type: loki
+          url: http://loki:3100
+          access: proxy
+          isDefault: false
+
+    # ─── Node Exporter ───
+    prometheus-node-exporter:
+      enabled: true
+
+    # ─── kube-state-metrics ───
+    kube-state-metrics:
+      enabled: true
+
+  # ─── Loki (log aggregation) ───
+  loki:
+    enabled: true
+    url: http://loki:3100
+
+  # ─── Promtail (log collector) ───
+  promtail:
+    enabled: true
+
+# ─── Loki subchart: S3 storage config ───
+loki:
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    commonConfig:
+      replication_factor: 1
+    storage:
+      bucketNames:
+        chunks: techshop-loki-790400775134
+        ruler: techshop-loki-790400775134
+      type: s3
+      s3:
+        region: ap-southeast-1
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: s3
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
