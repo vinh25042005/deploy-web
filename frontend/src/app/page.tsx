@@ -68,7 +68,7 @@ export default function HomePage() {
       {/* Products Grid */}
       <div className="max-w-7xl mx-auto px-4 py-12">
         <h2 className="text-2xl font-bold text-gray-800 mb-8">
-          📱 test ci/cd lần 3
+          📱 test ci/cd lần 4
         </h2>
 
         {loading ? (
