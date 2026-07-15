@@ -26,6 +26,13 @@ spec:
             - configMapRef: { name: frontend-config }
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: frontend
 ---
 apiVersion: v1
 kind: Service

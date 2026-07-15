@@ -32,3 +32,19 @@
   serial: 1
   roles:
     - worker
+
+# ─── Post-deploy: untaint tất cả control-plane nodes ───
+- name: Untaint all control-plane nodes (run after cluster is fully formed)
+  hosts: master[0]
+  become: yes
+  tasks:
+    - name: Remove control-plane taint from all masters
+      shell: |
+        kubectl taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
+      changed_when: false
+
+    - name: Taint ingress/worker nodes (chỉ ingress được schedule)
+      shell: |
+        kubectl taint node {{ hostvars[item]['ansible_host'] }} node-role=ingress:NoSchedule --overwrite 2>/dev/null || true
+      loop: "{{ groups['ingress'] }}"
+      changed_when: false

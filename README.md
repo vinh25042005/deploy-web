@@ -21,164 +21,183 @@
 
 ## 1. Kiến trúc tổng quan — Full Hạ tầng
 
-### 1a. Luồng request từ Người dùng → Web
+### 1a. Sơ đồ hạ tầng AWS
 
 ```mermaid
 flowchart TB
-    U[👤 Người dùng Browser] -->|"https://techshop.local"| DNS[/etc/hosts<br/>INGRESS_PUBLIC_IP → techshop.local/]
+    subgraph Internet["🌐 Internet"]
+        USER["👤 Người dùng"]
+    end
 
-    DNS -->|"TCP 443 (HTTPS)"| ING1
+    USER -->|"TCP 80/443"| NLB
 
     subgraph AWS["☁️ AWS ap-southeast-1 — VPC 10.0.0.0/16"]
+        NLB["🔀 AWS NLB<br/>techshop-ingress-nlb.elb..."]
+        
         subgraph PubA["🟢 Public Subnet A (AZ-a)"]
-            ING1[Ingress Node 1 - t3.medium - Public IP]
-            RANCHER[Rancher Server - t3.medium - Docker]
+            ING1["🟢 Ingress Node 1<br/>t3.medium · Pub IP: 52.77.232.101<br/>CHỈ chạy: ingress-nginx"]
+            RANCHER["🟢 Rancher Server<br/>t3.medium · Docker"]
         end
 
         subgraph PubB["🟢 Public Subnet B (AZ-b)"]
-            ING2[Ingress Node 2 - t3.medium - Public IP]
+            ING2["🟢 Ingress Node 2<br/>t3.medium · Pub IP: 13.215.253.12<br/>CHỈ chạy: ingress-nginx"]
         end
 
-        subgraph PrivA["🔒 Private Subnet A (AZ-a)"]
-            N1[K8s Node 1 - control-plane - t3.medium]
-            N2[K8s Node 2 - worker - t3.medium]
+        subgraph Priv["🔒 Private Subnets (AZ-a + AZ-b)"]
+            CP1["🔒 Control-Plane 1<br/>t3.medium · etcd"]
+            CP2["🔒 Control-Plane 2<br/>t3.medium · etcd"]
+            CP3["🔒 Control-Plane 3<br/>t3.medium · etcd"]
         end
-
-        subgraph PrivB["🔒 Private Subnet B (AZ-b)"]
-            N3[K8s Node 3 - worker - t3.medium]
-        end
-
-        subgraph K8s["K8s Cluster — namespace techshop"]
-            NGINX["🔀 NGINX Ingress Controller<br/>DaemonSet ×5, hostNetwork<br/>Bind :80 & :443 trên mọi node"]
-            SVC_FE["Service: frontend (ClusterIP :3000)"]
-            SVC_BE["Service: backend (ClusterIP :3001)"]
-            SVC_PG["Service: postgres (ClusterIP :5432)"]
-            FE["🖥️ Frontend Pod ×2 — Next.js :3000"]
-            BE["🖥️ Backend Pod ×2 — Express + Prisma :3001"]
-            PG["🗄️ Postgres Pod ×1 — PostgreSQL :5432"]
-            PVC["💾 PVC 10Gi — EBS gp3 (StorageClass)"]
-        end
+        
+        NLB -->|"Health Check TCP:80"| ING1
+        NLB -->|"Health Check TCP:80"| ING2
+        
+        ING1 -->|"hostNetwork: true<br/>bind :80, :443"| K8S
+        ING2 -->|"hostNetwork: true<br/>bind :80, :443"| K8S
     end
 
-    ING1 --> NGINX
-    ING2 --> NGINX
-    NGINX -->|"Host: techshop.local → /"| SVC_FE
-    SVC_FE --> FE
-    FE -->|"SSR Proxy /api/* → http://backend:3001"| SVC_BE
-    SVC_BE --> BE
-    BE -->|"Prisma Query"| SVC_PG
-    SVC_PG --> PG
-    PG --> PVC
+    subgraph K8S["K8s Cluster (kubeadm v1.32) — namespace: techshop"]
+        direction TB
+        NGINX["🔀 NGINX Ingress Controller<br/>DaemonSet ×5 (hostNetwork)<br/>Route theo Host header"]
+        FE["🖥️ Frontend ×2-5<br/>Next.js :3001"]
+        BE["⚙️ Backend ×2-5<br/>Express + Prisma :3000"]
+        PG["🗄️ Postgres ×1<br/>PostgreSQL :5432"]
+        PROM["📊 Prometheus + Grafana<br/>+ Alertmanager"]
+        CERT["🔒 cert-manager<br/>ClusterIssuer + Certificate"]
+        CSI["💾 EBS CSI Driver<br/>Provision EBS volumes"]
+        PVC["💾 PVC 10Gi · gp2"]
+    end
 
-    ING1 -.->|Internet GW| IGW[Internet Gateway]
-    ING2 -.->|Internet GW| IGW
-    N1 -.->|"Pull image, apt update"| NAT[NAT Gateway]
-    N2 -.->|"Pull image, apt update"| NAT
-    N3 -.->|"Pull image, apt update"| NAT
+    NGINX -->|"Host: techshop.local"| FE
+    NGINX -->|"Host: grafana.techshop.local"| PROM
+    FE -->|"/api/* → http://backend:3000"| BE
+    BE --> PG
+    PG --> PVC
+    CSI --> PVC
+    CERT --> NGINX
 ```
 
-> **Phân bố subnet:** 3 node K8s (control-plane + worker) nằm trong **Private Subnet**, ra internet qua NAT Gateway. 2 Ingress node + Rancher nằm trong **Public Subnet**, có Public IP trực tiếp ra internet qua Internet Gateway.
+> **Phân bố node:** 2 Ingress Node (Public Subnet) chỉ chạy ingress-nginx, nhận traffic từ NLB. 3 Control-Plane Node (Private Subnet) chạy TOÀN BỘ ứng dụng (backend, frontend, postgres, prometheus, grafana, cert-manager...). Ra internet qua NAT Gateway.
 
-### 1b. Luồng CI/CD & Pull Image
+### 1b. Luồng request chi tiết
+
+```mermaid
+sequenceDiagram
+    participant Browser as 👤 Browser
+    participant NLB as 🔀 AWS NLB
+    participant Ingress as 🟢 Ingress Node (ingress-nginx)
+    participant Frontend as 🖥️ Frontend Pod
+    participant Backend as ⚙️ Backend Pod
+    participant Postgres as 🗄️ Postgres
+    participant EBS as 💾 EBS Volume
+
+    Browser->>NLB: GET https://techshop.local/api/products
+    NLB->>Ingress: TCP forward (Health Check OK)
+    Ingress->>Ingress: TLS terminate + Host header routing
+    Ingress->>Frontend: Proxy /api/* → backend:3000
+    Frontend->>Backend: HTTP /api/products
+    Backend->>Postgres: SELECT * FROM products
+    Postgres->>EBS: Read data
+    EBS-->>Postgres: Data
+    Postgres-->>Backend: Rows
+    Backend-->>Frontend: JSON
+    Frontend-->>Ingress: HTML/JSON
+    Ingress-->>NLB: Response
+    NLB-->>Browser: HTTPS Response
+```
+
+### 1c. CI/CD Pipeline
 
 ```mermaid
 flowchart LR
-    DEV[👨‍💻 Developer<br/>push/merge main] --> CI
+    DEV["👨‍💻 Push main"] --> CI
 
     subgraph GHA["GitHub Actions"]
-        CI["CI (ci.yml)<br/>Lint → Test → Build → Push"]
-        CD["CD (deploy-gke.yml)<br/>Verify Sign → Deploy"]
+        CI["🔨 CI (ci.yml)<br/>Lint → Test → Build → Trivy → Syft → Cosign"]
+        CD["🚀 Deploy (deploy-gke.yml)<br/>Cosign Verify → kubectl rollout"]
     end
 
-    subgraph GHCR["GitHub Container Registry (ghcr.io)"]
-        IMG["backend:latest<br/>frontend:latest"]
+    subgraph GHCR["📦 GitHub Container Registry"]
+        IMG_BE["backend:sha-abc123<br/>backend:latest"]
+        IMG_FE["frontend:sha-abc123<br/>frontend:latest"]
     end
 
-    CI -->|"docker build & push"| IMG
-    CI -->|"Trivy Scan + Syft SBOM + Cosign Sign (OIDC)"| ATTEST[(Cosign Attestation)]
+    CI -->|"Build + Push tag SHA"| IMG_BE
+    CI -->|"Build + Push tag SHA"| IMG_FE
+    CI -->|"SBOM + Cosign Sign"| ATTEST["🔏 Cosign Attestation"]
     CI --> CD
-    CD -->|"Cosign Verify — reject nếu không có signature"| ATTEST
-    CD -->|"kubectl set image :latest"| K8s[K8s Cluster]
-    K8s -->|"kubelet pull image qua NAT Gateway"| IMG
+    CD -->|"Verify signature"| ATTEST
+    CD -->|"kubectl set image :sha-XXX"| K8S["☸️ K8s Cluster"]
+    K8S -->|"imagePullPolicy: Always"| IMG_BE
+    K8S -->|"imagePullPolicy: Always"| IMG_FE
 ```
 
-### 1c. Luồng Monitoring & Logging
+> **Dùng SHA tag thay vì latest:** Mỗi commit → 1 tag immutable `sha-<git hash>`. Deploy dùng SHA tag → không bị race condition khi 2 CI chạy gần nhau.
+
+### 1d. Monitoring Stack
 
 ```mermaid
 flowchart TB
-    subgraph K8s["K8s Cluster"]
-        NE["Node Exporter DaemonSet :9100<br/>(CPU, RAM, Disk mỗi node)"]
-        KSM["kube-state-metrics :8080<br/>(trạng thái Pod, Deploy...)"]
-        MS["Metrics Server :443<br/>(CPU/Mem cho HPA)"]
-        PT["Promtail DaemonSet<br/>đọc /var/log/pods/*"]
-        
-        PROM["Prometheus :9090<br/>retention 7d/5GB"]
-        LOKI["Loki SingleBinary :3100<br/>lưu log lên S3"]
-        GRAFANA["Grafana :3000<br/>Dashboard + Explore"]
+    subgraph K8S["K8s Cluster — namespace: techshop"]
+        METRICS["📊 Metrics Sources"]
+        NE["Node Exporter<br/>DaemonSet :9100"]
+        KSM["kube-state-metrics<br/>Deployment :8080"]
+        MS["Metrics Server<br/>Deployment :443"]
 
+        PROM["🔥 Prometheus<br/>StatefulSet :9090"]
+        AM["🚨 Alertmanager<br/>StatefulSet :9093"]
+        GRAFANA["📈 Grafana<br/>Deployment :80"]
+
+        METRICS --> PROM
         NE --> PROM
         KSM --> PROM
-        MS --> HPA[HPA: Backend + Frontend<br/>min 2, max 5, CPU 50%]
-        PT --> LOKI
         PROM --> GRAFANA
-        LOKI --> GRAFANA
+        PROM --> AM
+        MS --> HPA["⚡ HPA<br/>Backend + Frontend<br/>min2 · max5 · CPU 50%"]
     end
 
-    PROM -->|"PodRestartHigh Alert"| AM["Alertmanager :9093"]
-    LOKI -->|"lưu trữ log"| S3_LOKI[(S3: techshop-loki-790400775134)]
+    PROM -->|"PodRestartHigh Alert"| AM
 ```
 
-### 1d. Sơ đồ tổng quan tài nguyên AWS
+### 1e. Kiến trúc Node (Phân bổ Pod)
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     AWS ap-southeast-1                            │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ VPC 10.0.0.0/16                                             │ │
-│  │                                                              │ │
-│  │  ┌─────────────────────┐   ┌─────────────────────┐          │ │
-│  │  │ PUBLIC SUBNET AZ-a  │   │ PUBLIC SUBNET AZ-b  │          │ │
-│  │  │                     │   │                     │          │ │
-│  │  │  🟢 Rancher EC2     │   │  🟢 Ingress Node 2  │          │ │
-│  │  │  🟢 Ingress Node 1  │   │                     │          │ │
-│  │  └─────────┬───────────┘   └──────────┬──────────┘          │ │
-│  │            │ Internet GW               │ Internet GW         │ │
-│  │            └──────────────┬────────────┘                     │ │
-│  │                           │ NAT Gateway                      │ │
-│  │  ┌─────────────────────┐  │  ┌─────────────────────┐        │ │
-│  │  │ PRIVATE SUBNET AZ-a │  │  │ PRIVATE SUBNET AZ-b │        │ │
-│  │  │                     │  │  │                     │        │ │
-│  │  │  🔒 K8s Node 1      │  │  │  🔒 K8s Node 3      │        │ │
-│  │  │     (control-plane) │  │  │     (worker)        │        │ │
-│  │  │  🔒 K8s Node 2      │  │  │                     │        │ │
-│  │  │     (worker)        │  │  │                     │        │ │
-│  │  └─────────────────────┘  │  └─────────────────────┘        │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────┐     │
-│  │ IAM Role     │  │ SSM Parameter│  │ S3 Buckets           │     │
-│  │ SSM+EBS+S3  │  │ Store        │  │ • techshop-tfstate   │     │
-│  │              │  │ /k8s/kubeconf│  │ • techshop-loki-... │     │
-│  └──────────────┘  └──────────────┘  └─────────────────────┘     │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    5 EC2 t3.medium                           │
+│                                                              │
+│  ┌──────────────────────┐  ┌──────────────────────────────┐ │
+│  │  INGRESS NODES (2)   │  │  CONTROL-PLANE NODES (3)     │ │
+│  │  Public Subnet        │  │  Private Subnet              │ │
+│  │                       │  │                              │ │
+│  │  ✅ ingress-nginx     │  │  ✅ backend ×2               │ │
+│  │  ✅ ebs-csi-node      │  │  ✅ frontend ×3              │ │
+│  │  ✅ node-exporter     │  │  ✅ postgres                 │ │
+│  │                       │  │  ✅ prometheus               │ │
+│  │  ❌ KHÔNG chạy app    │  │  ✅ grafana                  │ │
+│  │     (taint: ingress)  │  │  ✅ alertmanager             │ │
+│  │                       │  │  ✅ cert-manager             │ │
+│  │  Nhận traffic từ NLB  │  │  ✅ etcd (3 replicas)        │ │
+│  └──────────────────────┘  └──────────────────────────────┘ │
+│                                                              │
+│  ┌──────────────────────┐                                    │
+│  │  RANCHER (1)         │                                    │
+│  │  Public Subnet        │                                    │
+│  │  Docker standalone    │                                    │
+│  └──────────────────────┘                                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Chi tiết từng bước khi người dùng truy cập `https://techshop.local`:
+### 1f. Luồng Backup/Restore
 
-| Bước | Thành phần | Hành động |
-|------|-----------|----------|
-| 1 | Browser | Gửi request HTTPS đến `techshop.local` |
-| 2 | `/etc/hosts` | Phân giải → Public IP của Ingress Node |
-| 3 | Internet Gateway | Route request vào VPC |
-| 4 | Ingress Node EC2 | Nhận request tại port 443 (public subnet) |
-| 5 | NGINX Ingress Controller | hostNetwork=true → listen trực tiếp port 443 của node |
-| 6 | NGINX | Đọc Ingress rule: `Host: techshop.local` → route đến Service `frontend:3000` |
-| 7 | Service frontend (ClusterIP) | Load-balance đến 1 trong 2 Frontend Pod |
-| 8 | Frontend Pod (Next.js) | Nếu request `/api/*` → proxy qua `http://backend:3001` |
-| 9 | Service backend (ClusterIP) | Load-balance đến 1 trong 2 Backend Pod |
-| 10 | Backend Pod (Express) | Query PostgreSQL qua Service `postgres:5432` |
-| 11 | Postgres Pod | Đọc/ghi dữ liệu từ PVC (EBS gp3 10Gi) |
-| 12 | Response | Đi ngược lại: Postgres → Backend → Frontend → NGINX → Browser |
+```mermaid
+flowchart LR
+    PG["🗄️ Postgres Pod"] -->|"CronJob: 0 */6 * * *"| CRON["⏰ CronJob<br/>postgres-backup"]
+    CRON -->|"pg_dump | gzip"| TMP["/tmp/backup.sql.gz"]
+    TMP -->|"aws s3 cp"| S3["☁️ S3 Bucket<br/>techshop-loki-*"]
+    
+    S3 -->|"InitContainer<br/>restore-from-s3"| INIT["🔄 Init Container<br/>khi volume mới"]
+    INIT -->|"gunzip | psql"| PG2["🗄️ Postgres Pod<br/>(fresh deploy)"]
+```
 ---
 
 ## 2. Cấu trúc thư mục
@@ -488,17 +507,19 @@ hpa:
   targetCPU: 50
 ```
 
-### Tổng số pod sau khi Helm deploy:
+### Tổng số pod sau khi Helm deploy (Loki ĐÃ TẮT):
 
 | Nhóm | Thành phần | Số pod |
 |------|-----------|--------|
 | App | Backend, Frontend, Postgres | 5 |
-| Ingress | NGINX Ingress Controller | 5 (DaemonSet) |
+| Ingress | NGINX Ingress Controller | 5 (DaemonSet trên mọi node) |
 | Storage | EBS CSI Controller + Node | 7 (2 controller + 5 node) |
-| Monitoring | Prometheus, Grafana, Alertmanager, Node Exporter, kube-state-metrics | 9 |
-| Logging | Loki SingleBinary, Promtail | 6 (1 Loki + 5 Promtail) |
+| Monitoring | Prometheus, Grafana, Alertmanager, Node Exporter, kube-state-metrics, Operator | 8 |
 | Metrics | Metrics Server | 1 |
-| **Tổng** | | **~33 pods** |
+| TLS | cert-manager, cainjector, webhook, startup job | 4 |
+| **Tổng** | | **~30 pods** |
+
+> **Lưu ý:** Loki & Promtail đã disable (`enabled: false`) do OOM trên t3.medium. Log vẫn có thể xem qua `kubectl logs`.
 
 ---
 
@@ -561,8 +582,9 @@ permissions:
 ├─────────────────────────────────────────────────────────┤
 │ 3. Build & Push (chỉ trên push main)                   │
 │    docker/build-push-action × 2 → GHCR                 │
-│    ghcr.io/vinh25042005/deploy-web/backend:latest       │
-│    ghcr.io/vinh25042005/deploy-web/frontend:latest      │
+│    Tag: sha-${GITHUB_SHA} + latest                     │
+│    ghcr.io/vinh25042005/deploy-web/backend:sha-xxx      │
+│    ghcr.io/vinh25042005/deploy-web/frontend:sha-xxx     │
 ├─────────────────────────────────────────────────────────┤
 │ 4. Trivy Scan                                          │
 │    aquasecurity/trivy-action, severity: CRITICAL,HIGH  │
@@ -597,12 +619,15 @@ permissions:
 │ Job 2: deploy-k8s (chỉ chạy nếu verify OK)             │
 │   1. Lấy kubeconfig từ AWS SSM Parameter Store         │
 │      aws ssm get-parameter --name /k8s/kubeconfig      │
-│   2. kubectl set image deploy/backend → :latest        │
+│   2. kubectl set image deploy/backend → :sha-${SHA}    │
 │   3. kubectl rollout status deploy/backend             │
-│   4. kubectl set image deploy/frontend → :latest       │
+│   4. kubectl set image deploy/frontend → :sha-${SHA}   │
 │   5. kubectl rollout status deploy/frontend            │
+│   6. kubectl rollout restart deploy/frontend           │
 └─────────────────────────────────────────────────────────┘
 ```
+
+> **SHA tag:** Dùng `sha-${GITHUB_SHA}` thay vì `latest` để đảm bảo mỗi lần deploy đúng phiên bản, tránh race condition khi 2 CI chạy gần nhau.
 
 ### GitHub Secrets cần thiết
 
@@ -617,15 +642,22 @@ permissions:
 
 | Dịch vụ | URL | Login |
 |---------|-----|-------|
-| **Web App** | `https://techshop.local` | `admin@shop.com` / `admin123` |
-| **Rancher** | `https://<RANCHER_IP>` (từ `terraform output rancher_url`) | `admin` / `admin` |
-| **Grafana** | `https://grafana.techshop.local` | `admin` / `prom-operator` |
+| **NLB DNS** | `techshop-ingress-nlb-....elb.ap-southeast-1.amazonaws.com` | — |
+| **Web App** | `http://<INGRESS_IP>` (52.77.232.101 hoặc 13.215.253.12) | `admin@shop.com` / `admin123` |
+| **Rancher** | `https://<RANCHER_IP>` (13.212.210.215) | `admin` / `admin` |
+| **Grafana** | `http://<INGRESS_IP>` (qua ingress host: `grafana.techshop.local`) | `admin` / `admin123` |
 | **Prometheus** | `kubectl port-forward -n techshop svc/techshop-dev-kube-promethe-prometheus 9090:9090` | — |
 
 **⚠️ Cần cập nhật `/etc/hosts` sau mỗi lần destroy + deploy (IP thay đổi):**
 ```
 <INGRESS_PUBLIC_IP> techshop.local grafana.techshop.local
 ```
+
+> **Lưu ý:** NLB được tạo bằng Terraform (`nlb.tf`) — tự động health check 2 ingress node trên TCP 80. Nếu dùng NLB DNS, không cần `/etc/hosts`. Nếu dùng trực tiếp IP public, cần thêm vào `/etc/hosts`.
+
+---
+
+## 9. Flow Destroy & Deploy đầy đủ
 Lấy IP mới: `cd ~/deploy-web/terraform/live && terraform output ingress_public_ips`
 
 ---
@@ -669,22 +701,30 @@ cd ~/deploy-web/helm/techshop
 helm dependency update
 helm upgrade --install techshop-dev . \
   --namespace techshop --create-namespace
-# → ~33 pods chạy (app + monitoring + infra)
+# → ~30 pods chạy (Loki đã tắt, tiết kiệm RAM)
 # → Chưa có: data trong database
 
-# 5. Database — Migration + Seed
-kubectl exec -n techshop deploy/backend -- npx prisma migrate deploy --schema=database/prisma/schema.prisma
-kubectl exec -n techshop deploy/backend -- npx tsx database/seed.ts
-# → Database có bảng + dữ liệu mẫu
+# 5. Database — Restore từ backup S3 (nhanh hơn seed)
+kubectl exec -n techshop deploy/postgres -- sh -c "
+LATEST=\$(aws s3 ls s3://techshop-loki-790400775134/ --region ap-southeast-1 | grep backup | sort | tail -1 | awk '{print \$4}')
+echo \"Restoring from: \$LATEST\"
+aws s3 cp s3://techshop-loki-790400775134/\$LATEST /tmp/restore.sql.gz --region ap-southeast-1
+gunzip -c /tmp/restore.sql.gz | psql -U postgres -d shopdb
+echo 'Restore done!'
+"
+# → Database có sẵn dữ liệu từ backup gần nhất
 
 # 6. Kiểm tra
 kubectl get pods -n techshop
 cd ~/deploy-web/terraform/live && terraform output
 
-# 7. Cập nhật /etc/hosts (IP thay đổi sau destroy)
-INGRESS_IP=$(cd ~/deploy-web/terraform/live && terraform output -raw ingress_public_ips | head -1 | tr -d '[]," ')
+# 7. Cập nhật /etc/hosts (dùng 1 trong 2 IP hoặc NLB DNS)
+INGRESS_IP=52.77.232.101   # hoặc 13.215.253.12
 sudo sed -i '/techshop.local/d' /etc/hosts
 echo "$INGRESS_IP techshop.local grafana.techshop.local" | sudo tee -a /etc/hosts
+
+# Hoặc dùng NLB DNS (không cần /etc/hosts nếu có domain thật):
+# curl -H "Host: techshop.local" http://<NLB_DNS>/api/products
 
 # 8. Truy cập
 # Web:       https://techshop.local
