@@ -3,6 +3,11 @@ output "ingress_public_ips" {
   value       = module.compute.ingress_public_ips
 }
 
+output "ingress_nlb_dns" {
+  description = "NLB DNS name for ingress (dùng thay IP trong Helm)"
+  value       = aws_lb.ingress.dns_name
+}
+
 output "rancher_url" {
   description = "Rancher URL"
   value       = module.rancher.rancher_url

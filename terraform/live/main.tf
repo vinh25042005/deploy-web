@@ -71,6 +71,88 @@ provider "helm" {
   }
 }
 
+# ── NLB cho Ingress: Terraform quản lý thay vì Helm ──
+resource "aws_lb" "ingress" {
+  name               = "${var.project_name}-ingress-nlb"
+  internal           = false
+  load_balancer_type = "network"
+  subnets            = [module.network.public_subnet_a_id, module.network.public_subnet_b_id]
+
+  # Giữ NLB khi destroy Helm (tránh bị xóa rồi tạo lại)
+  enable_deletion_protection = false
+
+  tags = { Name = "${var.project_name}-ingress-nlb" }
+}
+
+resource "aws_lb_target_group" "ingress_http" {
+  name     = "${var.project_name}-ingress-http"
+  port     = 80
+  protocol = "TCP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    port     = "3000"        # frontend port, ingress-nginx forward về đây
+    protocol = "HTTP"
+    path     = "/"
+    matcher  = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-ingress-http" }
+}
+
+resource "aws_lb_target_group" "ingress_https" {
+  name     = "${var.project_name}-ingress-https"
+  port     = 443
+  protocol = "TCP"
+  vpc_id   = module.network.vpc_id
+
+  health_check {
+    port     = "3000"
+    protocol = "HTTP"
+    path     = "/"
+    matcher  = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-ingress-https" }
+}
+
+# Gắn ingress nodes vào target group (dùng instance ID)
+resource "aws_lb_target_group_attachment" "ingress_http" {
+  count            = 2
+  target_group_arn = aws_lb_target_group.ingress_http.arn
+  target_id        = module.compute.ingress_instance_ids[count.index]
+  port             = 80
+}
+
+resource "aws_lb_target_group_attachment" "ingress_https" {
+  count            = 2
+  target_group_arn = aws_lb_target_group.ingress_https.arn
+  target_id        = module.compute.ingress_instance_ids[count.index]
+  port             = 443
+}
+
+resource "aws_lb_listener" "ingress_http" {
+  load_balancer_arn = aws_lb.ingress.arn
+  port              = "80"
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ingress_http.arn
+  }
+}
+
+resource "aws_lb_listener" "ingress_https" {
+  load_balancer_arn = aws_lb.ingress.arn
+  port              = "443"
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ingress_https.arn
+  }
+}
+
 # ── Rancher: EC2 riêng, nằm NGOÀI cụm K8s ──
 module "rancher" {
   source = "../modules/rancher"
@@ -81,20 +163,3 @@ module "rancher" {
   key_name        = local.config[local.env].key_name
   instance_type   = "t3.medium"
 }
-
-# ──  Sau terraform apply, chạy 3 lệnh sau theo thứ tự ──
-#
-#   Bước 1: Cài K8s cluster bằng Ansible
-#     eval $(ssh-agent -s) && ssh-add ~/.ssh/techshop-key.pem
-#     ansible-playbook -i ansible/inventory.ini ansible/playbooks/k8s-cluster.yml
-#
-#   Bước 2: Lấy kubeconfig từ SSM
-#     aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig \
-#       --query Parameter.Value --output text | base64 -d | gzip -d > ~/.kube/techshop-config
-#
-#   Bước 3: Deploy monitoring + app bằng Helm
-#     cd helm/techshop && helm dependency update
-#     kubectl create ns techshop --dry-run=client -o yaml | kubectl apply -f -
-#     helm upgrade --install techshop-dev . --namespace techshop \
-#       --set images.backend=nginx:alpine --set images.frontend=nginx:alpine \
-#       --set hpa.enabled=false --wait --timeout 10m

@@ -20,30 +20,52 @@ spec:
       {{- if .Values.postgres.backup.enabled }}
       initContainers:
       - name: restore-from-s3
-        image: amazon/aws-cli:latest
+        image: postgres:16-alpine
         env:
         - name: S3_BUCKET
           value: {{ .Values.postgres.backup.s3Bucket | quote }}
         - name: AWS_REGION
           value: {{ .Values.postgres.backup.s3Region | quote }}
+        - name: POSTGRES_DB
+          value: {{ .Values.postgres.database | quote }}
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.user | quote }}
         command:
         - /bin/sh
         - -c
         - |
-          if [ -f /var/lib/postgresql/PG_VERSION ]; then
-            echo "Database exists, skipping restore"
-          else
-            echo "Fresh volume, checking S3..."
-            LATEST=$(aws s3 ls s3://$S3_BUCKET/ | grep '.sql.gz' | sort | tail -1 | awk '{print $4}')
-            if [ -n "$LATEST" ]; then
-              echo "Restoring from s3://$S3_BUCKET/$LATEST"
-              aws s3 cp s3://$S3_BUCKET/$LATEST /tmp/restore.sql.gz
-              gunzip -c /tmp/restore.sql.gz | psql -h localhost -U {{ .Values.postgres.user }} -d {{ .Values.postgres.database }}
-              echo "Restore complete!"
-            else
-              echo "No backup in S3, starting fresh"
-            fi
+          PGDATA=/var/lib/postgresql/data
+          if [ -f "$PGDATA/PG_VERSION" ]; then
+            echo "Data exists, skipping restore"
+            exit 0
           fi
+
+          apk add --no-cache aws-cli > /dev/null 2>&1
+          echo "Fresh volume, checking S3..."
+          LATEST=$(aws s3 ls s3://$S3_BUCKET/ | grep '.sql.gz' | sort | tail -1 | awk '{print $4}')
+          if [ -z "$LATEST" ]; then
+            echo "No backup in S3, starting fresh"
+            exit 0
+          fi
+
+          echo "Downloading $LATEST..."
+          aws s3 cp s3://$S3_BUCKET/$LATEST /tmp/restore.sql.gz
+
+          # Init DB giống hệt postgres image entrypoint
+          eval "initdb --username=$POSTGRES_USER $PGDATA"
+          eval "pg_ctl -D $PGDATA -l /tmp/pg.log start"
+          sleep 2
+
+          # Tạo database nếu chưa có
+          psql -U "$POSTGRES_USER" -tc "SELECT 1 FROM pg_database WHERE datname='$POSTGRES_DB'" | grep -q 1 || \
+            createdb -U "$POSTGRES_USER" "$POSTGRES_DB"
+
+          # Restore
+          echo "Restoring to database $POSTGRES_DB..."
+          gunzip -c /tmp/restore.sql.gz | psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+
+          pg_ctl -D $PGDATA -l /tmp/pg.log stop
+          echo "Restore complete!"
         volumeMounts:
         - name: pgdata
           mountPath: /var/lib/postgresql
