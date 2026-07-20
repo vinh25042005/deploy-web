@@ -33,8 +33,8 @@
   roles:
     - worker
 
-# ─── Post-deploy: untaint tất cả control-plane nodes ───
-- name: Untaint all control-plane nodes (run after cluster is fully formed)
+# ─── Post-deploy: untaint + setup PV từ EBS cũ ───
+- name: Untaint all control-plane nodes + setup PV (run after cluster is fully formed)
   hosts: master[0]
   become: yes
   tasks:
@@ -47,4 +47,44 @@
       shell: |
         kubectl taint node {{ hostvars[item]['ansible_host'] }} node-role=ingress:NoSchedule --overwrite 2>/dev/null || true
       loop: "{{ groups['ingress'] }}"
+      changed_when: false
+
+    - name: Get AWS region
+      shell: curl -s http://169.254.169.254/latest/meta-data/placement/region
+      register: aws_region
+      changed_when: false
+
+    - name: Check for available EBS volumes (10Gi) — volume cũ còn data
+      shell: |
+        aws ec2 describe-volumes \
+          --filters "Name=status,Values=available" "Name=size,Values=10" \
+          --region "{{ aws_region.stdout }}" \
+          --query 'Volumes[0].VolumeId' --output text
+      register: old_vol
+      changed_when: false
+
+    - name: Create PV from existing EBS volume (để StatefulSet dùng lại data)
+      when: old_vol.stdout | length > 12
+      shell: |
+        kubectl delete pv postgres-data-old 2>/dev/null || true
+        kubectl apply -f - <<EOFM
+        apiVersion: v1
+        kind: PersistentVolume
+        metadata:
+          name: postgres-data-old
+        spec:
+          capacity:
+            storage: 10Gi
+          volumeMode: Filesystem
+          accessModes:
+            - ReadWriteOnce
+          persistentVolumeReclaimPolicy: Retain
+          storageClassName: techshop-ssd-immediate
+          claimRef:
+            name: pgdata-postgres-0
+            namespace: techshop
+          awsElasticBlockStore:
+            volumeID: {{ old_vol.stdout }}
+            fsType: ext4
+        EOFM
       changed_when: false
