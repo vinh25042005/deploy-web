@@ -43,8 +43,8 @@ resource "aws_iam_role_policy" "node_ssm_params" {
         Resource = "arn:aws:ssm:${var.region}:*:parameter/k8s/*"
       },
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "ec2:CreateVolume", "ec2:DeleteVolume", "ec2:DescribeVolumes",
           "ec2:AttachVolume", "ec2:DetachVolume", "ec2:DescribeInstances",
           "ec2:CreateTags", "ec2:DescribeTags"
@@ -52,11 +52,11 @@ resource "aws_iam_role_policy" "node_ssm_params" {
         Resource = "*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Effect = "Allow"
+        Action = ["s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = [
-          "arn:aws:s3:::techshop-loki-790400775134",
-          "arn:aws:s3:::techshop-loki-790400775134/*"
+          "arn:aws:s3:::${var.backup_bucket_name}",
+          "arn:aws:s3:::${var.backup_bucket_name}/*"
         ]
       }
     ]
@@ -110,14 +110,14 @@ resource "aws_instance" "ingress" {
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/inventory.tpl", {
     master_host = {
-      name       = "${var.project_name}-k8s-node-1"
-      public_ip  = aws_instance.node[0].public_ip
+      name      = "${var.project_name}-k8s-node-1"
+      public_ip = aws_instance.node[0].public_ip
     }
     worker_hosts = [
       for i in range(1, var.node_count) : {
-        name      = "${var.project_name}-k8s-node-${i + 1}"
+        name       = "${var.project_name}-k8s-node-${i + 1}"
         private_ip = aws_instance.node[i].private_ip
-        bastion   = aws_instance.node[0].public_ip
+        bastion    = aws_instance.node[0].public_ip
       }
     ]
     ingress_hosts = [
@@ -130,4 +130,4 @@ resource "local_file" "ansible_inventory" {
   })
   filename = "${path.root}/../../ansible/inventory.ini"
 }
-  
+

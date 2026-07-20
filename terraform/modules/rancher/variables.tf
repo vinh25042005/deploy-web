@@ -12,7 +12,7 @@ variable "rancher_version" {
 variable "rancher_bootstrap_password" {
   type        = string
   default     = "admin"
-  description = "Bootstrap password"
+  description = "Bootstrap password (change from 'admin' in production)"
   sensitive   = true
 }
 

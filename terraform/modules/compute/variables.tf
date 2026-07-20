@@ -15,8 +15,8 @@ variable "az" {
 variable "subnet_ids" {
   type = list(string)
 }
-variable "sg_ids"         {
-  type = list(string) 
+variable "sg_ids" {
+  type = list(string)
 }
 variable "key_name" {
   type    = string
@@ -61,3 +61,11 @@ variable "ingress_count" {
   type    = number
   default = 2
 }
+
+# ── Backup ──
+variable "backup_bucket_name" {
+  type        = string
+  description = "S3 bucket name for Postgres backup"
+  default     = "techshop-loki-790400775134"
+}
+

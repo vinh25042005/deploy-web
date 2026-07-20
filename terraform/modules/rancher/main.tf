@@ -27,7 +27,7 @@ resource "aws_instance" "rancher" {
 
   # ── User data: cài Docker + Rancher ──
   user_data = base64encode(templatefile("${path.module}/rancher-init.sh", {
-    rancher_version   = var.rancher_version
+    rancher_version    = var.rancher_version
     bootstrap_password = var.rancher_bootstrap_password
   }))
 }
