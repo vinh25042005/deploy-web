@@ -17,24 +17,12 @@ terraform {
 
 provider "aws" {
   region  = var.region
-  profile = "default"
+  profile = var.aws_profile
 }
 
-# ── Locals: tự động chọn config theo workspace ──
+# ── Locals ──
 locals {
   env = terraform.workspace
-
-  # Map config cho từng môi trường
-  config = {
-    dev = {
-      instance_type = "t3.medium"
-      key_name      = "techshop-key"
-    }
-    stg = {
-      instance_type = "t3.large"
-      key_name      = "techshop-key"
-    }
-  }
 }
 
 # ── Network ──
@@ -49,15 +37,16 @@ module "compute" {
   source        = "../modules/compute"
   project_name  = var.project_name
   region        = var.region
-  subnet_ids   = [module.network.public_subnet_a_id, module.network.private_subnet_a_id, module.network.private_subnet_b_id]
+  subnet_ids    = [module.network.public_subnet_a_id, module.network.private_subnet_a_id, module.network.private_subnet_b_id]
   sg_ids        = [module.network.sg_allow_internal_id, module.network.sg_allow_https_id]
-  instance_type = local.config[local.env].instance_type
-  node_count    = 3
-  key_name      = local.config[local.env].key_name
+  instance_type = var.instance_type
+  node_count    = var.node_count
+  key_name      = var.key_name
   # ── Ingress nodes (public subnet) ──
   ingress_subnet_ids = [module.network.public_subnet_a_id, module.network.public_subnet_b_id]
   ingress_sg_ids     = [module.network.sg_allow_internal_id, module.network.sg_allow_ingress_id]
-  ingress_count      = 2
+  ingress_count      = var.ingress_count
+  backup_bucket_name = var.backup_bucket_name
 }
 
 # ── Kubernetes + Helm provider ──
@@ -91,9 +80,9 @@ resource "aws_lb_target_group" "ingress_http" {
   vpc_id   = module.network.vpc_id
 
   health_check {
-    port     = "3000"        # frontend port, ingress-nginx forward về đây
+    port     = "80"
     protocol = "HTTP"
-    path     = "/"
+    path     = "/healthz"
     matcher  = "200-399"
   }
 
@@ -107,9 +96,9 @@ resource "aws_lb_target_group" "ingress_https" {
   vpc_id   = module.network.vpc_id
 
   health_check {
-    port     = "3000"
+    port     = "80"
     protocol = "HTTP"
-    path     = "/"
+    path     = "/healthz"
     matcher  = "200-399"
   }
 
@@ -157,9 +146,9 @@ resource "aws_lb_listener" "ingress_https" {
 module "rancher" {
   source = "../modules/rancher"
 
-  project_name    = var.project_name
+  project_name      = var.project_name
   rancher_subnet_id = module.network.public_subnet_a_id
-  vpc_id          = module.network.vpc_id
-  key_name        = local.config[local.env].key_name
-  instance_type   = "t3.medium"
+  vpc_id            = module.network.vpc_id
+  key_name          = var.key_name
+  instance_type     = var.rancher_instance_type
 }
