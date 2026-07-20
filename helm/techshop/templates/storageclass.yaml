@@ -11,4 +11,5 @@ parameters:
   type: gp3
   encrypted: "true"
 allowVolumeExpansion: true
+reclaimPolicy: Retain
 {{- end }}
