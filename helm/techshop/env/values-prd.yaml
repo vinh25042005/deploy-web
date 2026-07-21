@@ -1,3 +1,5 @@
+namespace: techshop-prd
+
 backend:
   replicas: 3
   resources:

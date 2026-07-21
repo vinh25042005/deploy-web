@@ -1,4 +1,4 @@
-namespace: techshop
+namespace: techshop-dev
 
 images:
   backend: ghcr.io/vinh25042005/deploy-web/backend:latest
