@@ -26,7 +26,7 @@ variable "instance_type" {
 
 variable "node_count" {
   type    = number
-  default = 3
+  default = 2
 }
 
 variable "ingress_count" {

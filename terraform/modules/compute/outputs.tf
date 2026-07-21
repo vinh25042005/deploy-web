@@ -3,3 +3,4 @@ output "node_instance_ids" { value = aws_instance.node[*].id }
 output "ingress_public_ips" { value = aws_instance.ingress[*].public_ip }
 output "ingress_private_ips" { value = aws_instance.ingress[*].private_ip }
 output "ingress_instance_ids" { value = aws_instance.ingress[*].id }
+output "master_public_ip" { value = aws_instance.node[0].public_ip }

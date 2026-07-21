@@ -51,30 +51,30 @@
       loop: "{{ groups['ingress'] }}"
       changed_when: false
 
-    - name: Install cert-manager CRDs
+    - name: Install cert-manager (CRDs + Helm via kubectl apply)
       shell: |
+        # CRDs
         kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
-      changed_when: false
-
-    - name: Add cert-manager Helm repo
-      shell: |
-        helm repo add jetstack https://charts.jetstack.io --force-update
-        helm repo update
-      changed_when: false
-
-    - name: Install cert-manager Helm chart
-      shell: |
-        helm upgrade --install cert-manager jetstack/cert-manager \
-          -n cert-manager --create-namespace \
-          --version v1.15.0 \
-          --set crds.enabled=false \
-          --wait --timeout 5m
+        # Install cert-manager manifest trực tiếp (ko cần helm)
+        kubectl create namespace cert-manager 2>/dev/null || true && kubectl apply -n cert-manager \
+          -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
+        # Đợi webhook ready
+        kubectl wait --for=condition=available --timeout=3m \
+          -n cert-manager deployment/cert-manager-webhook
       changed_when: false
 
     - name: Wait for cert-manager webhook ready
       shell: |
         kubectl wait --for=condition=available --timeout=3m \
           -n cert-manager deployment/cert-manager-webhook
+      changed_when: false
+
+    - name: Install ArgoCD
+      shell: |
+        kubectl create namespace argocd 2>/dev/null || true
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+        kubectl wait --for=condition=available --timeout=3m \
+          -n argocd deployment/argocd-server
       changed_when: false
 
     - name: Get AWS region

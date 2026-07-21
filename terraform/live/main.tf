@@ -152,3 +152,40 @@ module "rancher" {
   key_name          = var.key_name
   instance_type     = var.rancher_instance_type
 }
+
+# ── Ansible: tự động cài K8s cluster sau khi tất cả resource (kể cả NLB) ready ──
+resource "null_resource" "ansible" {
+  depends_on = [
+    module.compute,
+    module.rancher,
+    module.network,
+    aws_lb.ingress,
+    aws_lb_listener.ingress_http,
+    aws_lb_listener.ingress_https,
+    aws_lb_target_group_attachment.ingress_http,
+    aws_lb_target_group_attachment.ingress_https,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo ">>> Terraform outputs:"
+      terraform output
+      echo ""
+      echo ">>> Waiting 30s for nodes to boot..."
+      sleep 30
+      echo ">>> Starting SSH agent and running Ansible..."
+      ssh-agent -s > /tmp/ssh-agent.sh
+      . /tmp/ssh-agent.sh
+      ssh-add ~/.ssh/techshop-key.pem 2>/dev/null || true
+      # Download kubeconfig
+      aws ssm get-parameter --name /k8s/kubeconfig --region ap-southeast-1 \
+        --with-decryption --query 'Parameter.Value' --output text | base64 -d > /tmp/kcfg.gz
+      gzip -d -f /tmp/kcfg.gz 2>/dev/null && cp /tmp/kcfg ~/.kube/techshop-config 2>/dev/null || true
+      mkdir -p ~/.kube
+      cp /tmp/kcfg ~/.kube/techshop-config 2>/dev/null || true
+      cd ${path.root}/../../ansible
+      ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml \
+        --ssh-common-args="-o StrictHostKeyChecking=accept-new"
+    EOT
+  }
+}
