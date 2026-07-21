@@ -22,7 +22,23 @@ sudo docker run -d \
   jenkins/jenkins:lts-jdk21
 
 # ─── Đợi Jenkins khởi động ───
-sleep 30
+sleep 60
+
+# ─── Cài plugins mặc định + cần thiết ───
+sudo docker exec jenkins jenkins-plugin-cli --plugins \
+  docker-workflow \
+  kubernetes-cli \
+  blueocean \
+  git \
+  pipeline-stage-view \
+  pipeline-stage-step \
+  pipeline-input-step \
+  pipeline-build-step \
+  credentials-binding \
+  ssh-slaves \
+  matrix-auth \
+  email-ext \
+  workflow-aggregator
 
 # ─── In mật khẩu admin ───
 echo "========================================"
