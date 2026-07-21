@@ -1,8 +1,8 @@
 namespace: techshop-dev
 
 images:
-  backend: ghcr.io/vinh25042005/deploy-web/backend:latest
-  frontend: ghcr.io/vinh25042005/deploy-web/frontend:latest
+  backend: docker.io/vinh2504/deploy-web/backend:latest
+  frontend: docker.io/vinh2504/deploy-web/frontend:latest
   postgres: postgres:16-alpine
 
 backend:

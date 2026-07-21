@@ -13,7 +13,7 @@ pipeline {
     }
 
     environment {
-        REGISTRY = 'ghcr.io/vinh25042005/deploy-web'
+        REGISTRY = 'docker.io/vinh2504/deploy-web'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         IMAGE_TAG = "${GIT_COMMIT_SHORT}"
 
@@ -74,12 +74,12 @@ pipeline {
             steps {
                 dir('app-source') {
                     withCredentials([usernamePassword(
-                        credentialsId: 'ghcr-credentials',
-                        usernameVariable: 'GHCR_USER',
-                        passwordVariable: 'GHCR_PAT'
-                    )]) {
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PAT')
+                    ]) {
                         sh """
-                            echo \$GHCR_PAT | docker login ghcr.io -u \$GHCR_USER --password-stdin
+                            echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f backend/Dockerfile \\
                                 -t ${REGISTRY}/backend:${IMAGE_TAG} \\
                                 -t ${REGISTRY}/backend:${ENV} \\
@@ -121,12 +121,12 @@ pipeline {
             steps {
                 dir('app-source') {
                     withCredentials([usernamePassword(
-                        credentialsId: 'ghcr-credentials',
-                        usernameVariable: 'GHCR_USER',
-                        passwordVariable: 'GHCR_PAT'
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PAT'
                     )]) {
                         sh """
-                            echo \$GHCR_PAT | docker login ghcr.io -u \$GHCR_USER --password-stdin
+                            echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f frontend/Dockerfile \\
                                 --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
                                 -t ${REGISTRY}/frontend:${IMAGE_TAG} \\
