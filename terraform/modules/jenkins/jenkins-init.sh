@@ -6,9 +6,33 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker ubuntu
 sudo chmod 666 /var/run/docker.sock
 
-# ─── Cài Node.js (cho npm ci, lint, test) ───
+# ─── Cài Node.js ───
 sudo apt-get update -qq
 sudo apt-get install -y -qq nodejs npm 2>&1 | tail -3
+
+# ─── Tạo init script Groovy (tự động skip wizard + tạo admin) ───
+sudo mkdir -p /var/lib/docker/volumes/jenkins_home/_data/init.groovy.d
+cat << 'GEOOF' | sudo tee /var/lib/docker/volumes/jenkins_home/_data/init.groovy.d/01-skip-wizard.groovy
+import jenkins.model.*
+import hudson.security.*
+import jenkins.install.InstallState
+
+def instance = Jenkins.getInstance()
+
+// Tạo admin user
+def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+hudsonRealm.createAccount("admin", "admin123")
+instance.setSecurityRealm(hudsonRealm)
+
+// Full read/write permission
+def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+strategy.setAllowAnonymousRead(false)
+instance.setAuthorizationStrategy(strategy)
+
+// Skip setup wizard
+instance.setInstallState(InstallState.INITIALIZED)
+instance.save()
+GEOOF
 
 # ─── Chạy Jenkins container ───
 sudo docker run -d \
@@ -21,27 +45,28 @@ sudo docker run -d \
   --group-add $(getent group docker | cut -d: -f3) \
   jenkins/jenkins:lts-jdk21
 
-# ─── Đợi Jenkins khởi động ───
-sleep 60
+# ─── Đợi Jenkins ready ───
+echo "Waiting for Jenkins to be ready..."
+for i in $(seq 1 30); do
+  if curl -s http://localhost:${jenkins_port}/login > /dev/null 2>&1; then
+    echo "Jenkins is ready!"
+    break
+  fi
+  echo "  Waiting... ($i/30)"
+  sleep 10
+done
 
-# ─── Cài plugins mặc định + cần thiết ───
+# ─── Cài plugins ───
+echo "Installing plugins..."
 sudo docker exec jenkins jenkins-plugin-cli --plugins \
-  docker-workflow \
-  kubernetes-cli \
-  blueocean \
-  git \
-  pipeline-stage-view \
-  pipeline-stage-step \
-  pipeline-input-step \
-  pipeline-build-step \
-  credentials-binding \
-  ssh-slaves \
-  matrix-auth \
-  email-ext \
-  workflow-aggregator
+  docker-workflow kubernetes-cli blueocean git pipeline-stage-view \
+  credentials-binding matrix-auth workflow-aggregator aws-credentials 2>&1 | tail -5
 
-# ─── In mật khẩu admin ───
+# ─── Restart ───
+sudo docker restart jenkins
+sleep 20
+
 echo "========================================"
-echo "Jenkins initial admin password:"
-sudo docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+echo "✅ Jenkins ready: http://$(curl -s http://checkip.amazonaws.com):${jenkins_port}"
+echo "   User: admin / Password: admin123"
 echo "========================================"
