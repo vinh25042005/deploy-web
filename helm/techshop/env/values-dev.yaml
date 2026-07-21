@@ -1,0 +1,46 @@
+backend:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 128Mi }
+
+frontend:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 128Mi }
+
+postgres:
+  storage:
+    size: 5Gi
+
+config:
+  nodeEnv: development
+  frontendUrl: http://localhost:3000
+
+hpa:
+  enabled: false
+
+ingress:
+  host: dev.techshop.local
+
+# ─── Loki + Promtail cho dev ───
+monitoring:
+  loki:
+    enabled: true
+    url: http://techshop-dev-loki:3100
+  promtail:
+    enabled: true
+
+promtail:
+  config:
+    clients:
+      - url: http://techshop-dev-loki:3100/loki/api/v1/push
+
+loki:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 300m, memory: 256Mi }
+  extraEnv:
+    - name: AWS_REGION
+      value: ap-southeast-1

@@ -1,0 +1,21 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pod-restart-alert
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: {{ .Release.Name }}
+spec:
+  groups:
+    - name: techshop
+      rules:
+        - alert: PodRestartHigh
+          expr: rate(kube_pod_container_status_restarts_total{namespace="{{ .Values.namespace }}"}[3m]) * 600 > 2
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ "{{ $labels.pod }}" }} restart nhiều"
+            description: "Pod {{ "{{ $labels.pod }}" }} trong namespace {{ "{{ $labels.namespace }}" }} restart ~{{ "{{ $value | humanize }}" }} lần/10p (tb 3 phút)"
+{{- end }}

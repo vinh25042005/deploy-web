@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: techshop-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vinh25042005/deploy-web.git
+    targetRevision: capstone-week5
+    path: helm/techshop
+    helm:
+      valueFiles:
+        - values.yaml
+        - env/values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: techshop-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

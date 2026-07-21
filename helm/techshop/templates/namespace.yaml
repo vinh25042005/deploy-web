@@ -1,0 +1,3 @@
+# Namespace is created by helm --create-namespace flag
+# Do NOT define Namespace resource here to avoid conflict
+

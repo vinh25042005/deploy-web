@@ -1,0 +1,15 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.postgres.storage.className }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+volumeBindingMode: Immediate
+parameters:
+  type: gp3
+  encrypted: "true"
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+{{- end }}
