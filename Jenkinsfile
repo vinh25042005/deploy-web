@@ -69,51 +69,97 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker') {
+        stage('Build & Push Backend') {
             when { expression { !params.SKIP_BUILD } }
-            parallel {
-                stage('Backend Image') {
-                    steps {
-                        dir('app-source') {
-                            withCredentials([usernamePassword(
-                                credentialsId: 'ghcr-credentials',
-                                usernameVariable: 'GHCR_USER',
-                                passwordVariable: 'GHCR_PAT'
-                            )]) {
-                                sh """
-                                    echo \$GHCR_PAT | docker login ghcr.io -u \$GHCR_USER --password-stdin
-                                    docker build -f backend/Dockerfile \\
-                                        -t ${REGISTRY}/backend:${IMAGE_TAG} \\
-                                        -t ${REGISTRY}/backend:${ENV} \\
-                                        .
-                                    docker push ${REGISTRY}/backend:${IMAGE_TAG}
-                                    docker push ${REGISTRY}/backend:${ENV}
-                                """
-                            }
-                        }
+            steps {
+                dir('app-source') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'ghcr-credentials',
+                        usernameVariable: 'GHCR_USER',
+                        passwordVariable: 'GHCR_PAT'
+                    )]) {
+                        sh """
+                            echo \$GHCR_PAT | docker login ghcr.io -u \$GHCR_USER --password-stdin
+                            docker build -f backend/Dockerfile \\
+                                -t ${REGISTRY}/backend:${IMAGE_TAG} \\
+                                -t ${REGISTRY}/backend:${ENV} \\
+                                .
+                            docker push ${REGISTRY}/backend:${IMAGE_TAG}
+                            docker push ${REGISTRY}/backend:${ENV}
+                        """
                     }
                 }
-                stage('Frontend Image') {
-                    steps {
-                        dir('app-source') {
-                            withCredentials([usernamePassword(
-                                credentialsId: 'ghcr-credentials',
-                                usernameVariable: 'GHCR_USER',
-                                passwordVariable: 'GHCR_PAT'
-                            )]) {
-                                sh """
-                                    echo \$GHCR_PAT | docker login ghcr.io -u \$GHCR_USER --password-stdin
-                                    docker build -f frontend/Dockerfile \\
-                                        --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
-                                        -t ${REGISTRY}/frontend:${IMAGE_TAG} \\
-                                        -t ${REGISTRY}/frontend:${ENV} \\
-                                        .
-                                    docker push ${REGISTRY}/frontend:${IMAGE_TAG}
-                                    docker push ${REGISTRY}/frontend:${ENV}
-                                """
-                            }
-                        }
+            }
+        }
+
+        stage('Scan Backend') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                dir('app-source') {
+                    sh """
+                        trivy image ${REGISTRY}/backend:${IMAGE_TAG} \
+                            --severity CRITICAL,HIGH \
+                            --format sarif \
+                            --output trivy-backend.sarif \
+                            --exit-code 0 || true
+
+                        syft ${REGISTRY}/backend:${IMAGE_TAG} \
+                            --format spdx-json \
+                            --output sbom-backend.spdx.json || true
+                    """
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'app-source/trivy-backend.sarif, app-source/sbom-backend.spdx.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Build & Push Frontend') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                dir('app-source') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'ghcr-credentials',
+                        usernameVariable: 'GHCR_USER',
+                        passwordVariable: 'GHCR_PAT'
+                    )]) {
+                        sh """
+                            echo \$GHCR_PAT | docker login ghcr.io -u \$GHCR_USER --password-stdin
+                            docker build -f frontend/Dockerfile \\
+                                --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
+                                -t ${REGISTRY}/frontend:${IMAGE_TAG} \\
+                                -t ${REGISTRY}/frontend:${ENV} \\
+                                .
+                            docker push ${REGISTRY}/frontend:${IMAGE_TAG}
+                            docker push ${REGISTRY}/frontend:${ENV}
+                        """
                     }
+                }
+            }
+        }
+
+        stage('Scan Frontend') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                dir('app-source') {
+                    sh """
+                        trivy image ${REGISTRY}/frontend:${IMAGE_TAG} \
+                            --severity CRITICAL,HIGH \
+                            --format sarif \
+                            --output trivy-frontend.sarif \
+                            --exit-code 0 || true
+
+                        syft ${REGISTRY}/frontend:${IMAGE_TAG} \
+                            --format spdx-json \
+                            --output sbom-frontend.spdx.json || true
+                    """
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'app-source/trivy-frontend.sarif, app-source/sbom-frontend.spdx.json', allowEmptyArchive: true
                 }
             }
         }
@@ -122,8 +168,16 @@ pipeline {
             when { expression { !params.SKIP_DEPLOY } }
             steps {
                 dir('deploy-web/helm/techshop') {
-                    withKubeConfig(credentialsId: 'kubeconfig') {
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-access-key']]) {
                         sh """
+                            # Lấy kubeconfig mới nhất từ AWS SSM
+                            aws ssm get-parameter --region ap-southeast-1 \\
+                                --name /k8s/kubeconfig \\
+                                --query Parameter.Value --output text | \\
+                                base64 -d | gzip -d > ~/.kube/config || true
+
+                            export KUBECONFIG=~/.kube/config
                             helm dependency build .
                             helm upgrade --install techshop-${ENV} . \\
                                 --namespace ${KUBE_NAMESPACE} \\
