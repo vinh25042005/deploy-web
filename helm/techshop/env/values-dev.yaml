@@ -24,23 +24,8 @@ hpa:
 ingress:
   host: dev.techshop.local
 
-# ─── Loki + Promtail cho dev ───
 monitoring:
   loki:
-    enabled: true
-    url: http://techshop-dev-loki:3100
+    enabled: false
   promtail:
-    enabled: true
-
-promtail:
-  config:
-    clients:
-      - url: http://techshop-dev-loki:3100/loki/api/v1/push
-
-loki:
-  resources:
-    requests: { cpu: 50m, memory: 128Mi }
-    limits:   { cpu: 300m, memory: 256Mi }
-  extraEnv:
-    - name: AWS_REGION
-      value: ap-southeast-1
+    enabled: false

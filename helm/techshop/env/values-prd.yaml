@@ -29,20 +29,8 @@ ingress:
   host: shop.example.com
   tlsSecret: prod-tls
 
-# ─── Loki + Promtail cho production ───
 monitoring:
   loki:
-    enabled: true
-    url: http://techshop-prd-loki:3100
+    enabled: false
   promtail:
-    enabled: true
-
-promtail:
-  config:
-    clients:
-      - url: http://techshop-prd-loki:3100/loki/api/v1/push
-
-loki:
-  extraEnv:
-    - name: AWS_REGION
-      value: ap-southeast-1
+    enabled: false
