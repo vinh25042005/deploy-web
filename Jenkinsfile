@@ -81,11 +81,11 @@ pipeline {
                         sh """
                             echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f backend/Dockerfile \\
-                                -t ${REGISTRY}/backend:${IMAGE_TAG} \\
-                                -t ${REGISTRY}/backend:${ENV} \\
+                                -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                                -t ${REGISTRY_BASE}/deploy-web-backend:${ENV} \
                                 .
-                            docker push ${REGISTRY}/backend:${IMAGE_TAG}
-                            docker push ${REGISTRY}/backend:${ENV}
+                            docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                            docker push ${REGISTRY_BASE}/deploy-web-backend:${ENV}
                         """
                     }
                 }
@@ -129,11 +129,11 @@ pipeline {
                             echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f frontend/Dockerfile \\
                                 --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
-                                -t ${REGISTRY}/frontend:${IMAGE_TAG} \\
-                                -t ${REGISTRY}/frontend:${ENV} \\
+                                -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
+                                -t ${REGISTRY_BASE}/deploy-web-frontend:${ENV} \
                                 .
-                            docker push ${REGISTRY}/frontend:${IMAGE_TAG}
-                            docker push ${REGISTRY}/frontend:${ENV}
+                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${ENV}
                         """
                     }
                 }
