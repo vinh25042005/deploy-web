@@ -16,6 +16,14 @@ spec:
       labels:
         app: backend
     spec:
+      initContainers:
+        - name: prisma-migrate
+          image: {{ .Values.images.backend }}
+          imagePullPolicy: Always
+          command: ["npx", "prisma", "db", "push"]
+          envFrom:
+            - configMapRef: { name: backend-config }
+            - secretRef: { name: backend-secrets }
       containers:
         - name: backend
           image: {{ .Values.images.backend }}

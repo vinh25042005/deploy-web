@@ -51,9 +51,9 @@ ingress:
   tls:
     enabled: true    # cert-manager + selfsigned ClusterIssuer
 
-# ─── cert-manager (tự động tạo & renew TLS certificate) ───
+# ─── cert-manager — Ansible đã cài CRDs + Helm chart, subchart chỉ dùng fallback ───
 cert-manager:
-  installCRDs: true
+  installCRDs: false
 
 # ─── NGINX Ingress Controller subchart ───
 ingress-nginx:
@@ -64,6 +64,13 @@ ingress-nginx:
       useHostPort: true
     service:
       type: ClusterIP
+    nodeSelector:
+      role: ingress
+    tolerations:
+      - key: role
+        operator: Equal
+        value: ingress
+        effect: NoSchedule
 
 hpa:
   enabled: true

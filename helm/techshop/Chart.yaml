@@ -28,7 +28,3 @@ dependencies:
     version: "~3.12"
     repository: "https://kubernetes-sigs.github.io/metrics-server"
     condition: hpa.enabled
-  - name: cert-manager
-    version: "~1.15"
-    repository: "https://charts.jetstack.io"
-    condition: ingress.tls.enabled

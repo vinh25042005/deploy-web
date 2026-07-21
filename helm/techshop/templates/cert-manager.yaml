@@ -3,9 +3,6 @@ apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: techshop-selfsigned-issuer
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "5"
 spec:
   selfSigned: {}
 
@@ -15,9 +12,6 @@ kind: Certificate
 metadata:
   name: techshop-tls
   namespace: {{ .Values.namespace }}
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "10"
 spec:
   secretName: {{ .Values.ingress.tlsSecret }}
   duration: 2160h

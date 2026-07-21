@@ -33,8 +33,8 @@
   roles:
     - worker
 
-# ─── Post-deploy: untaint + setup PV từ EBS cũ ───
-- name: Untaint all control-plane nodes + setup PV (run after cluster is fully formed)
+# ─── Post-deploy: untaint + cert-manager + setup PV ───
+- name: Post-deploy tasks (cert-manager, PV, untaint)
   hosts: master[0]
   become: yes
   tasks:
@@ -43,10 +43,38 @@
         kubectl taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
       changed_when: false
 
-    - name: Taint ingress/worker nodes (chỉ ingress được schedule)
+    - name: Taint ingress nodes (chỉ ingress-nginx được schedule)
       shell: |
-        kubectl taint node {{ hostvars[item]['ansible_host'] }} node-role=ingress:NoSchedule --overwrite 2>/dev/null || true
+        NODE_NAME=$(ssh -o StrictHostKeyChecking=no {{ hostvars[item]['ansible_host'] }} hostname -s)
+        kubectl taint node $NODE_NAME role=ingress:NoSchedule --overwrite 2>/dev/null || true
+        kubectl label node $NODE_NAME role=ingress --overwrite 2>/dev/null || true
       loop: "{{ groups['ingress'] }}"
+      changed_when: false
+
+    - name: Install cert-manager CRDs
+      shell: |
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
+      changed_when: false
+
+    - name: Add cert-manager Helm repo
+      shell: |
+        helm repo add jetstack https://charts.jetstack.io --force-update
+        helm repo update
+      changed_when: false
+
+    - name: Install cert-manager Helm chart
+      shell: |
+        helm upgrade --install cert-manager jetstack/cert-manager \
+          -n cert-manager --create-namespace \
+          --version v1.15.0 \
+          --set crds.enabled=false \
+          --wait --timeout 5m
+      changed_when: false
+
+    - name: Wait for cert-manager webhook ready
+      shell: |
+        kubectl wait --for=condition=available --timeout=3m \
+          -n cert-manager deployment/cert-manager-webhook
       changed_when: false
 
     - name: Get AWS region

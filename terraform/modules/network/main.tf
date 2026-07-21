@@ -116,21 +116,26 @@ resource "aws_route_table_association" "private_b" {
 resource "aws_security_group" "allow_internal" {
   name = "${var.project_name
   }-allow-internal"
-  description = "Allow all VPC internal traffic"
+  description = "Allow all internal traffic + SSH between nodes"
   vpc_id      = aws_vpc.main.id
   ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [var.public_subnet_a_cidr, var.public_subnet_b_cidr, var.private_subnet_a_cidr, var.private_subnet_b_cidr]
-
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    self      = true
+  }
+  # Cho phép SSH từ bastion (public subnet) vào private nodes
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.public_subnet_a_cidr, var.public_subnet_b_cidr]
   }
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-
   }
 }
 
