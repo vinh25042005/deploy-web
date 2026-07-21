@@ -13,7 +13,7 @@ pipeline {
     }
 
     environment {
-        REGISTRY = 'docker.io/vinh2504/deploy-web'
+        REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         IMAGE_TAG = "${GIT_COMMIT_SHORT}"
 
@@ -97,13 +97,13 @@ pipeline {
             steps {
                 dir('app-source') {
                     sh """
-                        trivy image ${REGISTRY}/backend:${IMAGE_TAG} \
+                        trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --format sarif \
                             --output trivy-backend.sarif \
                             --exit-code 0 || true
 
-                        syft ${REGISTRY}/backend:${IMAGE_TAG} \
+                        syft ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                             --format spdx-json \
                             --output sbom-backend.spdx.json || true
                     """
@@ -145,13 +145,13 @@ pipeline {
             steps {
                 dir('app-source') {
                     sh """
-                        trivy image ${REGISTRY}/frontend:${IMAGE_TAG} \
+                        trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --format sarif \
                             --output trivy-frontend.sarif \
                             --exit-code 0 || true
 
-                        syft ${REGISTRY}/frontend:${IMAGE_TAG} \
+                        syft ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                             --format spdx-json \
                             --output sbom-frontend.spdx.json || true
                     """
@@ -182,8 +182,8 @@ pipeline {
                             helm upgrade --install techshop-${ENV} . \\
                                 --namespace ${KUBE_NAMESPACE} \\
                                 --create-namespace \\
-                                --set images.backend=${REGISTRY}/backend:${IMAGE_TAG} \\
-                                --set images.frontend=${REGISTRY}/frontend:${IMAGE_TAG} \\
+                                --set images.backend=${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                                --set images.frontend=${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                                 --values values.yaml \\
                                 ${ENV != 'dev' ? "--values env/values-${ENV}.yaml" : ''} \\
                                 --wait --timeout 5m
