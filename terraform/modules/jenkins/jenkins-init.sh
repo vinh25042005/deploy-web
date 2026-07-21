@@ -10,8 +10,11 @@ sudo chmod 666 /var/run/docker.sock
 sudo apt-get update -qq
 sudo apt-get install -y -qq nodejs npm 2>&1 | tail -3
 
-# ─── Tạo init script Groovy (tự động skip wizard + tạo admin) ───
+# ─── Tạo thư mục data cho Jenkins với đúng permissions ───
 sudo mkdir -p /var/lib/docker/volumes/jenkins_home/_data/init.groovy.d
+sudo chown -R 1000:1000 /var/lib/docker/volumes/jenkins_home/_data
+
+# ─── Init Groovy script (tự động skip wizard + tạo admin) ───
 cat << 'GEOOF' | sudo tee /var/lib/docker/volumes/jenkins_home/_data/init.groovy.d/01-skip-wizard.groovy
 import jenkins.model.*
 import hudson.security.*
