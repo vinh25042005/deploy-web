@@ -11,11 +11,11 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq nodejs npm 2>&1 | tail -3
 
 # ─── Tạo thư mục data cho Jenkins với đúng permissions ───
-sudo mkdir -p /var/lib/docker/volumes/jenkins_home/_data/init.groovy.d
-sudo chown -R 1000:1000 /var/lib/docker/volumes/jenkins_home/_data
+sudo mkdir -p /jenkins-home/init.groovy.d
+sudo chown -R 1000:1000 /jenkins-home
 
 # ─── Init Groovy script (tự động skip wizard + tạo admin) ───
-cat << 'GEOOF' | sudo tee /var/lib/docker/volumes/jenkins_home/_data/init.groovy.d/01-skip-wizard.groovy
+cat << 'GEOOF' | sudo tee /jenkins-home/init.groovy.d/01-skip-wizard.groovy
 import jenkins.model.*
 import hudson.security.*
 import jenkins.install.InstallState
@@ -43,7 +43,7 @@ sudo docker run -d \
   --restart unless-stopped \
   -p ${jenkins_port}:8080 \
   -p 50000:50000 \
-  -v jenkins_home:/var/jenkins_home \
+  -v /jenkins-home:/var/jenkins_home \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --group-add $(getent group docker | cut -d: -f3) \
   jenkins/jenkins:lts-jdk21
