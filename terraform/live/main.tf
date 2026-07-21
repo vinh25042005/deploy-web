@@ -153,6 +153,18 @@ module "rancher" {
   instance_type     = var.rancher_instance_type
 }
 
+# ── Jenkins: EC2 riêng chạy Jenkins CI ──
+module "jenkins" {
+  source = "../modules/jenkins"
+
+  project_name      = var.project_name
+  jenkins_subnet_id = module.network.public_subnet_a_id
+  vpc_id            = module.network.vpc_id
+  key_name          = var.key_name
+  instance_type     = var.jenkins_instance_type
+  disk_size         = var.jenkins_disk_size
+}
+
 # ── Ansible: tự động cài K8s cluster sau khi tất cả resource (kể cả NLB) ready ──
 resource "null_resource" "ansible" {
   depends_on = [
