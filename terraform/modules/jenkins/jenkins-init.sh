@@ -36,6 +36,7 @@ instance.setAuthorizationStrategy(strategy)
 instance.setInstallState(InstallState.INITIALIZED)
 instance.save()
 GEOOF
+sudo chown 1000:1000 /jenkins-home/init.groovy.d/01-skip-wizard.groovy
 
 # ─── Chạy Jenkins container ───
 sudo docker run -d \
