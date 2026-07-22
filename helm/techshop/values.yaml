@@ -93,6 +93,8 @@ monitoring:
 
   # ─── kube-prometheus-stack (Prometheus + Grafana + Alertmanager) ───
   kube-prometheus-stack:
+    crds:
+      enabled: false
     alertmanager:
       enabled: false
 

@@ -45,9 +45,11 @@
 
     - name: Taint ingress nodes (chỉ ingress-nginx được schedule)
       shell: |
-        NODE_NAME=$(ssh -o StrictHostKeyChecking=no {{ hostvars[item]['ansible_host'] }} hostname -s)
+        NODE_NAME=$(kubectl get nodes -o json | \
+          jq -r '.items[] | select(.status.addresses[] | select(.type=="InternalIP" and .address=="{{ hostvars[item].ansible_default_ipv4.address }}")) | .metadata.name')
         kubectl taint node $NODE_NAME role=ingress:NoSchedule --overwrite 2>/dev/null || true
         kubectl label node $NODE_NAME role=ingress --overwrite 2>/dev/null || true
+        echo "Labeled $NODE_NAME as ingress"
       loop: "{{ groups['ingress'] }}"
       changed_when: false
 
