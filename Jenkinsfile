@@ -10,6 +10,8 @@ pipeline {
         choice(name: 'ENV', choices: ['dev', 'stg', 'prd'], description: 'Target environment')
         string(name: 'APP_REPO_BRANCH', defaultValue: 'techshop-app', description: 'Branch of techshop-app')
         booleanParam(name: 'SKIP_BUILD', defaultValue: false, description: 'Skip Docker build?')
+        booleanParam(name: 'SKIP_BACKEND', defaultValue: false, description: 'Skip backend (chỉ build frontend)')
+        booleanParam(name: 'SKIP_FRONTEND', defaultValue: false, description: 'Skip frontend (chỉ build backend)')
     }
 
     environment {
@@ -43,8 +45,32 @@ pipeline {
             }
         }
 
+        stage('Check changes') {
+            steps {
+                dir('app-source') {
+                    script {
+                        def changed = sh(
+                            script: 'git diff --name-only HEAD~1 2>/dev/null || echo "first-build"',
+                            returnStdout: true
+                        ).trim()
+                        if (changed == 'first-build') {
+                            env.BUILD_BACKEND = 'true'
+                            env.BUILD_FRONTEND = 'true'
+                            echo "First build → build all"
+                        } else {
+                            env.BUILD_BACKEND = changed.contains('backend/') ? 'true' : 'false'
+                            env.BUILD_FRONTEND = changed.contains('frontend/') ? 'true' : 'false'
+                            echo "Changed files: ${changed.split('\n').join(', ')}"
+                        }
+                        echo "→ Build backend: ${env.BUILD_BACKEND}"
+                        echo "→ Build frontend: ${env.BUILD_FRONTEND}"
+                    }
+                }
+            }
+        }
+
         stage('Lint & Test') {
-            when { expression { !params.SKIP_BUILD } }
+            when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
             matrix {
                 axes {
                     axis {
@@ -93,7 +119,7 @@ pipeline {
         }
 
         stage('Build & Push Backend') {
-            when { expression { !params.SKIP_BUILD } }
+            when { expression { !params.SKIP_BUILD && !params.SKIP_BACKEND && env.BUILD_BACKEND != 'false' } }
             steps {
                 dir('app-source') {
                     withCredentials([usernamePassword(
@@ -114,7 +140,7 @@ pipeline {
         }
 
         stage('Scan Backend') {
-            when { expression { !params.SKIP_BUILD } }
+            when { expression { !params.SKIP_BUILD && !params.SKIP_BACKEND && env.BUILD_BACKEND != 'false' } }
             steps {
                 dir('app-source') {
                     sh """
@@ -145,7 +171,7 @@ pipeline {
         }
 
         stage('Build & Push Frontend') {
-            when { expression { !params.SKIP_BUILD } }
+            when { expression { !params.SKIP_BUILD && !params.SKIP_FRONTEND && env.BUILD_FRONTEND != 'false' } }
             steps {
                 dir('app-source') {
                     withCredentials([usernamePassword(
@@ -167,7 +193,7 @@ pipeline {
         }
 
         stage('Scan Frontend') {
-            when { expression { !params.SKIP_BUILD } }
+            when { expression { !params.SKIP_BUILD && !params.SKIP_FRONTEND && env.BUILD_FRONTEND != 'false' } }
             steps {
                 dir('app-source') {
                     sh """
