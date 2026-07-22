@@ -47,28 +47,32 @@
       shell: |
         NODE_NAME=$(kubectl get nodes -o json | \
           jq -r '.items[] | select(.status.addresses[] | select(.type=="InternalIP" and .address=="{{ hostvars[item].ansible_default_ipv4.address }}")) | .metadata.name')
-        kubectl taint node $NODE_NAME role=ingress:NoSchedule --overwrite 2>/dev/null || true
-        kubectl label node $NODE_NAME role=ingress --overwrite 2>/dev/null || true
-        echo "Labeled $NODE_NAME as ingress"
+        if [ -n "$NODE_NAME" ] && [ "$NODE_NAME" != "null" ]; then
+          kubectl taint node $NODE_NAME role=ingress:NoSchedule --overwrite 2>/dev/null || true
+          kubectl label node $NODE_NAME role=ingress --overwrite 2>/dev/null || true
+          echo "Labeled $NODE_NAME as ingress"
+        else
+          echo "WARNING: Could not find K8s node for {{ hostvars[item].ansible_default_ipv4.address }}"
+        fi
       loop: "{{ groups['ingress'] }}"
       changed_when: false
 
-    - name: Install cert-manager (CRDs + Helm via kubectl apply)
+    - name: Install cert-manager (CRDs + manifest)
       shell: |
-        # CRDs
         kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
-        # Install cert-manager manifest trực tiếp (ko cần helm)
-        kubectl create namespace cert-manager 2>/dev/null || true && kubectl apply -n cert-manager \
+        kubectl create namespace cert-manager 2>/dev/null || true
+        kubectl apply -n cert-manager \
           -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
-        # Đợi webhook ready
         kubectl wait --for=condition=available --timeout=3m \
           -n cert-manager deployment/cert-manager-webhook
       changed_when: false
 
-    - name: Wait for cert-manager webhook ready
+    - name: Install kube-prometheus-stack CRDs (tránh lỗi >262KB khi ArgoCD sync)
       shell: |
-        kubectl wait --for=condition=available --timeout=3m \
-          -n cert-manager deployment/cert-manager-webhook
+        CRD_BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd"
+        for crd in alertmanagers prometheuses prometheusagents scrapeconfigs alertmanagerconfigs thanosrulers; do
+          kubectl apply -f "$CRD_BASE/monitoring.coreos.com_${crd}.yaml" 2>/dev/null || true
+        done
       changed_when: false
 
     - name: Install ArgoCD
@@ -77,6 +81,11 @@
         kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
         kubectl wait --for=condition=available --timeout=3m \
           -n argocd deployment/argocd-server
+      changed_when: false
+
+    - name: Apply ArgoCD root app (app-of-apps)
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/vinh25042005/deploy-web/capstone-week5/argocd/root.yaml
       changed_when: false
 
     - name: Get AWS region

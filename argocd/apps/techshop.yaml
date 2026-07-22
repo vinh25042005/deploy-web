@@ -22,6 +22,7 @@ spec:
       valueFiles:
         - values.yaml
         - env/values-dev.yaml
+      skipCrds: true
   destination:
     server: https://kubernetes.default.svc
     namespace: techshop-dev
@@ -31,3 +32,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true

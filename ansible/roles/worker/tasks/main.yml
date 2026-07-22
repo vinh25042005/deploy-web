@@ -45,7 +45,8 @@
 
 - name: Untaint self (control-plane nodes mới join vẫn bị taint)
   shell: |
-    NODE_NAME=$(hostname)
+    NODE_NAME=$(kubectl get nodes -o json | \
+      jq -r '.items[] | select(.status.addresses[] | select(.type=="InternalIP" and .address=="{{ hostvars[inventory_hostname].ansible_default_ipv4.address }}")) | .metadata.name')
     kubectl taint node $NODE_NAME node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
   when: node_type == 'master'
   delegate_to: "{{ groups['master'][0] }}"
@@ -53,7 +54,8 @@
 
 - name: Label ingress node
   shell: |
-    NODE_NAME=$(hostname)
+    NODE_NAME=$(kubectl get nodes -o json | \
+      jq -r '.items[] | select(.status.addresses[] | select(.type=="InternalIP" and .address=="{{ hostvars[inventory_hostname].ansible_default_ipv4.address }}")) | .metadata.name')
     kubectl label node $NODE_NAME role=ingress --overwrite
   when: node_type == 'ingress'
   delegate_to: "{{ groups['master'][0] }}"
