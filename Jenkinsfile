@@ -9,7 +9,6 @@ pipeline {
         choice(name: 'ENV', choices: ['dev', 'stg', 'prd'], description: 'Target environment')
         string(name: 'APP_REPO_BRANCH', defaultValue: 'techshop-app', description: 'Branch of techshop-app')
         booleanParam(name: 'SKIP_BUILD', defaultValue: false, description: 'Skip Docker build?')
-        booleanParam(name: 'SKIP_DEPLOY', defaultValue: false, description: 'Skip Helm deploy?')
     }
 
     environment {
@@ -19,9 +18,6 @@ pipeline {
 
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
         APP_BRANCH = "${params.APP_REPO_BRANCH}"
-
-        HELM_CHART_PATH = "${WORKSPACE}/deploy-web/helm/techshop"
-        KUBE_NAMESPACE = "techshop-${params.ENV}"
     }
 
     stages {
@@ -204,47 +200,10 @@ pipeline {
             }
         }
 
-        stage('Deploy Helm') {
-            when { expression { !params.SKIP_DEPLOY } }
-            steps {
-                dir('deploy-web/helm/techshop') {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-access-key']]) {
-                        sh """
-                            # Lấy kubeconfig mới nhất từ AWS SSM
-                            aws ssm get-parameter --region ap-southeast-1 \\
-                                --name /k8s/kubeconfig \\
-                                --query Parameter.Value --output text | \\
-                                base64 -d | gzip -d > ~/.kube/config || true
-
-                            export KUBECONFIG=~/.kube/config
-                            helm dependency build .
-                            helm upgrade --install techshop-${params.ENV} . \
-                                --namespace ${KUBE_NAMESPACE} \
-                                --create-namespace \
-                                --set images.backend=${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                                --set images.frontend=${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                                --values values.yaml \
-                                ${params.ENV != 'dev' ? "--values env/values-${params.ENV}.yaml" : ''} \
-                                --wait --timeout 5m
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Smoke Test') {
-            when { expression { !params.SKIP_DEPLOY } }
-            steps {
-                sh """
-                    echo "✅ Deploy ${params.ENV} completed with tag ${IMAGE_TAG}"
-                """
-            }
-        }
     }
 
     post {
-        success { echo "✅ Pipeline thành công: ${params.ENV} @ ${IMAGE_TAG}" }
-        failure { echo "❌ Pipeline thất bại!" }
+        success { echo "✅ CI thành công! ArgoCD sẽ deploy ${params.ENV} @ ${IMAGE_TAG}" }
+        failure { echo "❌ CI thất bại!" }
     }
 }
