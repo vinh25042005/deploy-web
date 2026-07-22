@@ -99,6 +99,12 @@ pipeline {
                     sh """
                         trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
+                            --format table \
+                            --output trivy-backend.txt \
+                            --exit-code 0 || true
+
+                        trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                            --severity CRITICAL,HIGH \
                             --format sarif \
                             --output trivy-backend.sarif \
                             --exit-code 0 || true
@@ -109,8 +115,8 @@ pipeline {
                 }
             }
             post {
-                success {
-                    archiveArtifacts artifacts: 'app-source/trivy-backend.sarif, app-source/sbom-backend.spdx.json', allowEmptyArchive: true
+                always {
+                    archiveArtifacts artifacts: 'app-source/trivy-backend.txt, app-source/trivy-backend.sarif, app-source/sbom-backend.spdx.json', allowEmptyArchive: true
                 }
             }
         }
@@ -146,6 +152,12 @@ pipeline {
                     sh """
                         trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
+                            --format table \
+                            --output trivy-frontend.txt \
+                            --exit-code 0 || true
+
+                        trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
+                            --severity CRITICAL,HIGH \
                             --format sarif \
                             --output trivy-frontend.sarif \
                             --exit-code 0 || true
@@ -156,8 +168,8 @@ pipeline {
                 }
             }
             post {
-                success {
-                    archiveArtifacts artifacts: 'app-source/trivy-frontend.sarif, app-source/sbom-frontend.spdx.json', allowEmptyArchive: true
+                always {
+                    archiveArtifacts artifacts: 'app-source/trivy-frontend.txt, app-source/trivy-frontend.sarif, app-source/sbom-frontend.spdx.json', allowEmptyArchive: true
                 }
             }
         }
