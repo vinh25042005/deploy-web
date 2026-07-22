@@ -26,10 +26,10 @@ resource "aws_instance" "rancher" {
   tags = { Name = "${var.project_name}-rancher" }
 
   # ── User data: cài Docker + Rancher ──
-  user_data = base64encode(templatefile("${path.module}/rancher-init.sh", {
+  user_data = templatefile("${path.module}/rancher-init.sh", {
     rancher_version    = var.rancher_version
     bootstrap_password = var.rancher_bootstrap_password
-  }))
+  })
 }
 
 # ── Security Group cho Rancher ──

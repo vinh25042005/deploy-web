@@ -17,6 +17,23 @@ spec:
         app: backend
     spec:
       initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for postgres:5432 ..."
+              for i in $(seq 1 60); do
+                if nc -z postgres 5432 2>/dev/null; then
+                  echo "Postgres is ready!"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "Timeout waiting for postgres"
+              exit 1
         - name: prisma-migrate
           image: {{ .Values.images.backend }}
           imagePullPolicy: Always

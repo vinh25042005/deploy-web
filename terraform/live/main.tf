@@ -11,7 +11,7 @@ terraform {
     key            = "terraform.tfstate"
     region         = "ap-southeast-1"
     encrypt        = true
-    dynamodb_table = "techshop-tfstate-lock"
+    use_lockfile   = true
   }
 }
 
@@ -153,10 +153,18 @@ module "rancher" {
   instance_type     = var.rancher_instance_type
 }
 
-# ── Ansible: tự động cài K8s cluster sau khi tất cả resource (kể cả NLB) ready ──
+# ── Ansible: tự động cài K8s cluster sau khi tất cả resource ready ──
 resource "null_resource" "ansible" {
+  # Re-run Ansible nếu instance bị thay thế (IP đổi → inventory đổi)
+  triggers = {
+    instance_ids = join(",", concat(
+      module.compute.node_instance_ids,
+      module.compute.ingress_instance_ids
+    ))
+  }
+
   depends_on = [
-    module.compute,
+    module.compute,       # (bao gồm local_file.ansible_inventory)
     module.rancher,
     module.network,
     aws_lb.ingress,
@@ -169,30 +177,53 @@ resource "null_resource" "ansible" {
   provisioner "local-exec" {
     command = <<-EOT
       KEY=~/.ssh/techshop-key.pem
-      INVENTORY=${path.root}/../../ansible/inventory.ini
+      INVENTORY="${path.root}/../../ansible/inventory.ini"
       NODES=$(grep -oP 'ansible_host=\K[0-9.]+' "$INVENTORY" | grep -v '^10\.' | sort -u)
 
       echo ">>> Fix key permissions..."
       chmod 600 "$KEY"
 
       echo ">>> Waiting for all nodes to be SSH-ready..."
+      FAILED=0
       for IP in $NODES; do
         echo "  Waiting for $IP:22 ..."
+        SUCCESS=0
         for i in $(seq 1 30); do
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$KEY" ubuntu@$IP "exit" 2>/dev/null && break
+          if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$KEY" ubuntu@$IP "exit" 2>/dev/null; then
+            SUCCESS=1
+            break
+          fi
           echo "    retry $i/30..."
           sleep 10
         done
+        if [ "$SUCCESS" -eq 0 ]; then
+          echo "  ERROR: $IP not reachable after 30 retries!"
+          FAILED=1
+        fi
       done
+
+      if [ "$FAILED" -eq 1 ]; then
+        echo ">>> Some nodes not reachable! Aborting."
+        exit 1
+      fi
       echo ">>> All nodes ready!"
 
       echo ">>> Starting SSH agent..."
       eval $(ssh-agent -s)
       ssh-add "$KEY"
 
-      echo ">>> Running Ansible..."
-      cd $(dirname "$INVENTORY")
-      ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml
+      echo ">>> Running Ansible (retry up to 3 times, timeout 20m)..."
+      cd "$(dirname "$INVENTORY")"
+      for i in $(seq 1 3); do
+        if timeout 1200 ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml; then
+          echo ">>> Ansible completed successfully!"
+          exit 0
+        fi
+        echo "    Ansible attempt $i/3 failed, retrying in 30s..."
+        sleep 30
+      done
+      echo ">>> Ansible failed after 3 attempts"
+      exit 1
     EOT
   }
 }

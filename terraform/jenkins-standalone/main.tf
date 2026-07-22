@@ -105,7 +105,7 @@ resource "aws_instance" "jenkins" {
 
   tags = { Name = "${var.project_name}-jenkins" }
 
-  user_data = base64encode(templatefile("${path.module}/jenkins-init.sh", {
+  user_data = templatefile("${path.module}/jenkins-init.sh", {
     jenkins_port = var.jenkins_port
-  }))
+  })
 }
