@@ -82,10 +82,10 @@ pipeline {
                             echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f backend/Dockerfile \\
                                 -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-backend:${ENV} \
+                                -t ${REGISTRY_BASE}/deploy-web-backend:${params.ENV} \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-backend:${ENV}
+                            docker push ${REGISTRY_BASE}/deploy-web-backend:${params.ENV}
                         """
                     }
                 }
@@ -104,8 +104,7 @@ pipeline {
                             --exit-code 0 || true
 
                         syft ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                            --format spdx-json \
-                            --output sbom-backend.spdx.json || true
+                            -o spdx-json=sbom-backend.spdx.json || true
                     """
                 }
             }
@@ -130,10 +129,10 @@ pipeline {
                             docker build -f frontend/Dockerfile \\
                                 --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
                                 -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-frontend:${ENV} \
+                                -t ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV} \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${ENV}
+                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV}
                         """
                     }
                 }
@@ -152,8 +151,7 @@ pipeline {
                             --exit-code 0 || true
 
                         syft ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                            --format spdx-json \
-                            --output sbom-frontend.spdx.json || true
+                            -o spdx-json=sbom-frontend.spdx.json || true
                     """
                 }
             }
@@ -179,13 +177,13 @@ pipeline {
 
                             export KUBECONFIG=~/.kube/config
                             helm dependency build .
-                            helm upgrade --install techshop-${ENV} . \\
-                                --namespace ${KUBE_NAMESPACE} \\
-                                --create-namespace \\
+                            helm upgrade --install techshop-${params.ENV} . \
+                                --namespace ${KUBE_NAMESPACE} \
+                                --create-namespace \
                                 --set images.backend=${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                                 --set images.frontend=${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                                --values values.yaml \\
-                                ${ENV != 'dev' ? "--values env/values-${ENV}.yaml" : ''} \\
+                                --values values.yaml \
+                                ${params.ENV != 'dev' ? "--values env/values-${params.ENV}.yaml" : ''} \
                                 --wait --timeout 5m
                         """
                     }
@@ -197,14 +195,14 @@ pipeline {
             when { expression { !params.SKIP_DEPLOY } }
             steps {
                 sh """
-                    echo "✅ Deploy ${ENV} completed with tag ${IMAGE_TAG}"
+                    echo "✅ Deploy ${params.ENV} completed with tag ${IMAGE_TAG}"
                 """
             }
         }
     }
 
     post {
-        success { echo "✅ Pipeline thành công: ${ENV} @ ${IMAGE_TAG}" }
+        success { echo "✅ Pipeline thành công: ${params.ENV} @ ${IMAGE_TAG}" }
         failure { echo "❌ Pipeline thất bại!" }
     }
 }
