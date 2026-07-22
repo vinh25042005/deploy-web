@@ -99,8 +99,10 @@ pipeline {
                     sh """
                         trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
+                            --scanners vuln \
                             --format table \
                             --exit-code 0 2>&1 | \
+                            grep -E "Total|CRITICAL|HIGH|MEDIUM|LOW|^-|^\+" | \
                             tee trivy-backend.txt || true
 
                         trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
@@ -152,8 +154,10 @@ pipeline {
                     sh """
                         trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
+                            --scanners vuln \
                             --format table \
                             --exit-code 0 2>&1 | \
+                            grep -E "Total|CRITICAL|HIGH|MEDIUM|LOW|^-|^\+" | \
                             tee trivy-frontend.txt || true
 
                         trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
