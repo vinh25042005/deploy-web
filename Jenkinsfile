@@ -48,21 +48,39 @@ pipeline {
 
         stage('Lint & Test') {
             when { expression { !params.SKIP_BUILD } }
-            parallel {
-                stage('Backend') {
-                    steps {
-                        dir('app-source/backend') {
-                            sh 'npm ci'
-                            sh 'npm run lint 2>/dev/null || true'
-                            sh 'npm test 2>/dev/null || true'
-                        }
+            matrix {
+                axes {
+                    axis {
+                        name 'NODE_VERSION'
+                        values '18', '20', '22'
                     }
                 }
-                stage('Frontend') {
-                    steps {
-                        dir('app-source/frontend') {
-                            sh 'npm ci'
-                            sh 'npx tsc --noEmit 2>/dev/null || true'
+                stages {
+                    stage('Backend (Node $NODE_VERSION)') {
+                        steps {
+                            dir('app-source/backend') {
+                                sh """
+                                    export NVM_DIR=/var/jenkins_home/.nvm
+                                    [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+                                    nvm use ${NODE_VERSION}
+                                    npm ci
+                                    npm run lint 2>/dev/null || true
+                                    npm test 2>/dev/null || true
+                                """
+                            }
+                        }
+                    }
+                    stage('Frontend (Node $NODE_VERSION)') {
+                        steps {
+                            dir('app-source/frontend') {
+                                sh """
+                                    export NVM_DIR=/var/jenkins_home/.nvm
+                                    [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+                                    nvm use ${NODE_VERSION}
+                                    npm ci
+                                    npx tsc --noEmit 2>/dev/null || true
+                                """
+                            }
                         }
                     }
                 }
