@@ -14,7 +14,7 @@ pipeline {
     environment {
         REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-        IMAGE_TAG = "${GIT_COMMIT_SHORT}"
+        IMAGE_TAG = "${params.ENV}-${GIT_COMMIT_SHORT}"
 
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
         APP_BRANCH = "${params.APP_REPO_BRANCH}"
@@ -104,10 +104,8 @@ pipeline {
                             echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f backend/Dockerfile \\
                                 -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-backend:${params.ENV} \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-backend:${params.ENV}
                         """
                     }
                 }
@@ -159,10 +157,8 @@ pipeline {
                             docker build -f frontend/Dockerfile \\
                                 --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
                                 -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV} \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV}
                         """
                     }
                 }

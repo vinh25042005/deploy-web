@@ -1,3 +1,7 @@
+images:
+  backend: docker.io/vinh2504/deploy-web-backend:dev
+  frontend: docker.io/vinh2504/deploy-web-frontend:dev
+
 backend:
   replicas: 1
   resources:

@@ -1,5 +1,9 @@
 namespace: techshop-stg
 
+images:
+  backend: docker.io/vinh2504/deploy-web-backend:stg
+  frontend: docker.io/vinh2504/deploy-web-frontend:stg
+
 backend:
   replicas: 2
 

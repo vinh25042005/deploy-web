@@ -1,5 +1,9 @@
 namespace: techshop-prd
 
+images:
+  backend: docker.io/vinh2504/deploy-web-backend:prd
+  frontend: docker.io/vinh2504/deploy-web-frontend:prd
+
 backend:
   replicas: 3
   resources:
