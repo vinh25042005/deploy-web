@@ -102,7 +102,7 @@ pipeline {
                             --scanners vuln \
                             --format table \
                             --exit-code 0 2>&1 | \
-                            grep -E "Total|CRITICAL|HIGH|MEDIUM|LOW|^-|^\+" | \
+                            grep -v "node_modules" | \
                             tee trivy-backend.txt || true
 
                         trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
@@ -157,7 +157,7 @@ pipeline {
                             --scanners vuln \
                             --format table \
                             --exit-code 0 2>&1 | \
-                            grep -E "Total|CRITICAL|HIGH|MEDIUM|LOW|^-|^\+" | \
+                            grep -v "node_modules" | \
                             tee trivy-frontend.txt || true
 
                         trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
