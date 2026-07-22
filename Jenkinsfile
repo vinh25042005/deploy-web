@@ -100,8 +100,8 @@ pipeline {
                         trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --format table \
-                            --output trivy-backend.txt \
-                            --exit-code 0 || true
+                            --exit-code 0 2>&1 | \
+                            tee trivy-backend.txt || true
 
                         trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
@@ -153,8 +153,8 @@ pipeline {
                         trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --format table \
-                            --output trivy-frontend.txt \
-                            --exit-code 0 || true
+                            --exit-code 0 2>&1 | \
+                            tee trivy-frontend.txt || true
 
                         trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
