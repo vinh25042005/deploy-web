@@ -58,7 +58,11 @@ pipeline {
                 stages {
                     stage('Backend (Node $NODE_VERSION)') {
                         steps {
-                            dir('app-source/backend') {
+                            sh """
+                                rm -rf app-source-backend-${NODE_VERSION}
+                                cp -r app-source/backend app-source-backend-${NODE_VERSION}
+                            """
+                            dir("app-source-backend-${NODE_VERSION}") {
                                 sh """
                                     export NVM_DIR=/var/jenkins_home/.nvm
                                     [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
@@ -72,7 +76,11 @@ pipeline {
                     }
                     stage('Frontend (Node $NODE_VERSION)') {
                         steps {
-                            dir('app-source/frontend') {
+                            sh """
+                                rm -rf app-source-frontend-${NODE_VERSION}
+                                cp -r app-source/frontend app-source-frontend-${NODE_VERSION}
+                            """
+                            dir("app-source-frontend-${NODE_VERSION}") {
                                 sh """
                                     export NVM_DIR=/var/jenkins_home/.nvm
                                     [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
