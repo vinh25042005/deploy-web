@@ -153,18 +153,6 @@ module "rancher" {
   instance_type     = var.rancher_instance_type
 }
 
-# ── Jenkins: EC2 riêng chạy Jenkins CI ──
-module "jenkins" {
-  source = "../modules/jenkins"
-
-  project_name      = var.project_name
-  jenkins_subnet_id = module.network.public_subnet_a_id
-  vpc_id            = module.network.vpc_id
-  key_name          = var.key_name
-  instance_type     = var.jenkins_instance_type
-  disk_size         = var.jenkins_disk_size
-}
-
 # ── Ansible: tự động cài K8s cluster sau khi tất cả resource (kể cả NLB) ready ──
 resource "null_resource" "ansible" {
   depends_on = [
@@ -180,24 +168,31 @@ resource "null_resource" "ansible" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo ">>> Terraform outputs:"
-      terraform output
-      echo ""
-      echo ">>> Waiting 30s for nodes to boot..."
-      sleep 30
-      echo ">>> Starting SSH agent and running Ansible..."
-      ssh-agent -s > /tmp/ssh-agent.sh
-      . /tmp/ssh-agent.sh
-      ssh-add ~/.ssh/techshop-key.pem 2>/dev/null || true
-      # Download kubeconfig
-      aws ssm get-parameter --name /k8s/kubeconfig --region ap-southeast-1 \
-        --with-decryption --query 'Parameter.Value' --output text | base64 -d > /tmp/kcfg.gz
-      gzip -d -f /tmp/kcfg.gz 2>/dev/null && cp /tmp/kcfg ~/.kube/techshop-config 2>/dev/null || true
-      mkdir -p ~/.kube
-      cp /tmp/kcfg ~/.kube/techshop-config 2>/dev/null || true
-      cd ${path.root}/../../ansible
-      ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml \
-        --ssh-common-args="-o StrictHostKeyChecking=accept-new"
+      KEY=~/.ssh/techshop-key.pem
+      INVENTORY=${path.root}/../../ansible/inventory.ini
+      NODES=$(grep -oP 'ansible_host=\K[0-9.]+' "$INVENTORY" | grep -v '^10\.' | sort -u)
+
+      echo ">>> Fix key permissions..."
+      chmod 600 "$KEY"
+
+      echo ">>> Waiting for all nodes to be SSH-ready..."
+      for IP in $NODES; do
+        echo "  Waiting for $IP:22 ..."
+        for i in $(seq 1 30); do
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$KEY" ubuntu@$IP "exit" 2>/dev/null && break
+          echo "    retry $i/30..."
+          sleep 10
+        done
+      done
+      echo ">>> All nodes ready!"
+
+      echo ">>> Starting SSH agent..."
+      eval $(ssh-agent -s)
+      ssh-add "$KEY"
+
+      echo ">>> Running Ansible..."
+      cd $(dirname "$INVENTORY")
+      ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml
     EOT
   }
 }

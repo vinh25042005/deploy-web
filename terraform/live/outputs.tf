@@ -18,11 +18,6 @@ output "monitoring_grafana" {
   value       = "kubectl port-forward -n ${var.project_name} svc/${var.project_name}-dev-grafana 9999:80"
 }
 
-output "jenkins_url" {
-  description = "Jenkins URL"
-  value       = module.jenkins.jenkins_url
-}
-
 output "etc_hosts_entry" {
   description = "Add to /etc/hosts: <NLB_IP> project.local grafana.project.local"
   value       = "<dig +short ${aws_lb.ingress.dns_name} | head -1> ${var.project_name}.local grafana.${var.project_name}.local"

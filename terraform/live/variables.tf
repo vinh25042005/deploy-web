@@ -52,18 +52,6 @@ variable "rancher_instance_type" {
   default = "t3.medium"
 }
 
-variable "jenkins_instance_type" {
-  type    = string
-  default = "t3.small"
-  description = "EC2 type for Jenkins"
-}
-
-variable "jenkins_disk_size" {
-  type    = number
-  default = 10
-  description = "Jenkins root volume size (GB)"
-}
-
 variable "kubeconfig_path" {
   type    = string
   default = "~/.kube/config"

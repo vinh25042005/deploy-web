@@ -60,6 +60,46 @@ for i in $(seq 1 30); do
   sleep 10
 done
 
+# ─── Cài Node.js trong container ───
+echo "Installing Node.js inside Jenkins container..."
+sudo docker exec -u root jenkins bash -c "
+  apt-get update -qq && apt-get install -y -qq curl gnupg 2>&1 | tail -3
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y -qq nodejs 2>&1 | tail -5
+  node --version && npm --version
+"
+
+# ─── Cài Docker CLI trong container ───
+echo "Installing Docker CLI inside Jenkins container..."
+sudo docker exec -u root jenkins bash -c "
+  curl -fsSL https://get.docker.com | sh
+  docker --version
+"
+
+# ─── Cài Trivy + Syft trong container ───
+echo "Installing Trivy and Syft inside Jenkins container..."
+sudo docker exec -u root jenkins bash -c "
+  apt-get install -y -qq wget apt-transport-https gnupg 2>&1 | tail -1
+  wget -qO- https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor > /usr/share/keyrings/trivy.gpg
+  echo 'deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main' > /etc/apt/sources.list.d/trivy.list
+  apt-get update -qq 2>/dev/null
+  apt-get install -y -qq trivy 2>&1 | tail -2
+  trivy --version 2>&1 | head -1
+  curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin 2>&1 | tail -1
+  syft --version
+"
+
+# ─── Cài nvm + Node 18/20 trong container ───
+echo "Installing nvm and multiple Node versions..."
+sudo docker exec -u root jenkins bash -c "
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+  export NVM_DIR=/var/jenkins_home/.nvm
+  [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+  nvm install 18
+  nvm install 20
+  chown -R 1000:1000 \$NVM_DIR
+"
+
 # ─── Cài plugins ───
 echo "Installing plugins..."
 sudo docker exec jenkins jenkins-plugin-cli --plugins \
