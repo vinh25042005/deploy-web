@@ -57,30 +57,54 @@
       loop: "{{ groups['ingress'] }}"
       changed_when: false
 
-    - name: Install cert-manager (CRDs + manifest)
+    - name: Install cert-manager (CRDs + manifest + fix RBAC + CA)
       shell: |
+        set -e
         kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
         kubectl create namespace cert-manager 2>/dev/null || true
         kubectl apply -n cert-manager \
           -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
         kubectl wait --for=condition=available --timeout=3m \
           -n cert-manager deployment/cert-manager-webhook
-        # Đợi cainjector inject CA bundle vào webhook
-        echo "Waiting for cert-manager CA bundle..."
-        for i in $(seq 1 12); do
-          CA_LEN=$(kubectl get validatingwebhookconfigurations cert-manager-webhook -o json | jq '.webhooks[0].clientConfig.caBundle | length' 2>/dev/null)
-          if [ "$CA_LEN" -gt 100 ] 2>/dev/null; then
-            echo "CA bundle injected (${CA_LEN} bytes)"
-            break
-          fi
-          sleep 5
-        done
-        # Nếu vẫn chưa có CA thì restart cainjector để ép nó inject
-        CA_LEN=$(kubectl get validatingwebhookconfigurations cert-manager-webhook -o json | jq '.webhooks[0].clientConfig.caBundle | length' 2>/dev/null)
-        if [ "$CA_LEN" -lt 100 ] 2>/dev/null; then
-          echo "CA bundle still empty, restarting cainjector..."
-          kubectl rollout restart -n cert-manager deployment/cert-manager-cainjector
-          sleep 15
+
+        # Fix RBAC leader election
+        kubectl apply -f - <<EOFRBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cert-manager-leader-election
+rules:
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cert-manager-leader-election
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cert-manager-leader-election
+subjects:
+- kind: ServiceAccount
+  name: cert-manager
+  namespace: cert-manager
+EOFRBAC
+        kubectl rollout restart -n cert-manager deployment/cert-manager
+        kubectl wait --for=condition=available --timeout=2m -n cert-manager deployment/cert-manager
+        sleep 10
+
+        # Inject CA vào validating + mutating webhooks nếu cainjector chưa làm
+        CA=$(kubectl get secret -n cert-manager cert-manager-webhook-ca -o jsonpath='{.data.tls\.crt}' 2>/dev/null || echo "")
+        if [ -n "$CA" ]; then
+          for wh_type in validating mutating; do
+            CURRENT_CA=$(kubectl get ${wh_type}webhookconfigurations cert-manager-webhook -o json | jq -r '.webhooks[0].clientConfig.caBundle' 2>/dev/null)
+            if [ "$CURRENT_CA" != "$CA" ]; then
+              kubectl patch ${wh_type}webhookconfigurations cert-manager-webhook \
+                --type json -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/clientConfig/caBundle\", \"value\": \"$CA\"}]"
+            fi
+          done
         fi
       changed_when: false
 
