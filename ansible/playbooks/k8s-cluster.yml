@@ -65,20 +65,38 @@
           -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
         kubectl wait --for=condition=available --timeout=3m \
           -n cert-manager deployment/cert-manager-webhook
+        # Đợi cainjector inject CA bundle vào webhook
+        echo "Waiting for cert-manager CA bundle..."
+        for i in $(seq 1 12); do
+          CA_LEN=$(kubectl get validatingwebhookconfigurations cert-manager-webhook -o json | jq '.webhooks[0].clientConfig.caBundle | length' 2>/dev/null)
+          if [ "$CA_LEN" -gt 100 ] 2>/dev/null; then
+            echo "CA bundle injected (${CA_LEN} bytes)"
+            break
+          fi
+          sleep 5
+        done
+        # Nếu vẫn chưa có CA thì restart cainjector để ép nó inject
+        CA_LEN=$(kubectl get validatingwebhookconfigurations cert-manager-webhook -o json | jq '.webhooks[0].clientConfig.caBundle | length' 2>/dev/null)
+        if [ "$CA_LEN" -lt 100 ] 2>/dev/null; then
+          echo "CA bundle still empty, restarting cainjector..."
+          kubectl rollout restart -n cert-manager deployment/cert-manager-cainjector
+          sleep 15
+        fi
       changed_when: false
 
-    - name: Install kube-prometheus-stack CRDs (tránh lỗi >262KB khi ArgoCD sync)
+    - name: Install kube-prometheus-stack CRDs (server-side, tránh lỗi >262KB)
       shell: |
         CRD_BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd"
-        for crd in alertmanagers prometheuses prometheusagents scrapeconfigs alertmanagerconfigs thanosrulers; do
-          kubectl apply -f "$CRD_BASE/monitoring.coreos.com_${crd}.yaml" 2>/dev/null || true
+        for crd in alertmanagers alertmanagerconfigs podmonitors probes prometheuses prometheusagents prometheusrules scrapeconfigs servicemonitors thanosrulers; do
+          curl -sL "$CRD_BASE/monitoring.coreos.com_${crd}.yaml" | kubectl apply --server-side -f - 2>/dev/null || true
         done
       changed_when: false
 
-    - name: Install ArgoCD
+    - name: Install ArgoCD (server-side để tránh lỗi CRD >262KB)
       shell: |
         kubectl create namespace argocd 2>/dev/null || true
-        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+        curl -sL https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml | \
+          kubectl apply --server-side -n argocd -f -
         kubectl wait --for=condition=available --timeout=3m \
           -n argocd deployment/argocd-server
       changed_when: false

@@ -68,6 +68,8 @@ ingress-nginx:
       role: ingress
     tolerations:
       - key: role
+    admissionWebhooks:
+      enabled: false
         operator: Equal
         value: ingress
         effect: NoSchedule

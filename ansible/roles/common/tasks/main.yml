@@ -84,13 +84,14 @@
     dest: /etc/apt/sources.list.d/kubernetes.list
     content: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /"
 
-- name: Install kubeadm, kubectl, kubelet, awscli
+- name: Install kubeadm, kubectl, kubelet, awscli, jq
   apt:
     name:
       - kubelet
       - kubeadm
       - kubectl
       - awscli
+      - jq
     state: present
     update_cache: yes
 
