@@ -68,29 +68,9 @@
           -n cert-manager deployment/cert-manager-webhook
 
         # Fix RBAC leader election
-        kubectl apply -f - <<EOFRBAC
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: cert-manager-leader-election
-rules:
-- apiGroups: ["coordination.k8s.io"]
-  resources: ["leases"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cert-manager-leader-election
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cert-manager-leader-election
-subjects:
-- kind: ServiceAccount
-  name: cert-manager
-  namespace: cert-manager
-EOFRBAC
+        kubectl create clusterrole cert-manager-leader-election 2>/dev/null || true
+        kubectl patch clusterrole cert-manager-leader-election --type json -p='[{"op":"add","path":"/rules/-","value":{"apiGroups":["coordination.k8s.io"],"resources":["leases"],"verbs":["get","list","watch","create","update","patch","delete"]}}]' 2>/dev/null || true
+        kubectl create clusterrolebinding cert-manager-leader-election --clusterrole=cert-manager-leader-election --serviceaccount=cert-manager:cert-manager 2>/dev/null || true
         kubectl rollout restart -n cert-manager deployment/cert-manager
         kubectl wait --for=condition=available --timeout=2m -n cert-manager deployment/cert-manager
         sleep 10
