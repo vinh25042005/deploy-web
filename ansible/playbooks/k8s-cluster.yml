@@ -59,8 +59,7 @@
 
     - name: Install cert-manager (CRDs + manifest + fix RBAC + CA)
       shell: |
-        set -e
-        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml 2>/dev/null || true
         kubectl create namespace cert-manager 2>/dev/null || true
         kubectl apply -n cert-manager \
           -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
