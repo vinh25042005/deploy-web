@@ -1,0 +1,31 @@
+{{- if and .Values.backend.enabled .Values.frontend.enabled }}
+# ── PostSync Hook: kiểm tra health sau khi deploy thành công ──
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deploy-health-check
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: health-check
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Deploy Health Check ==="
+              echo "Checking backend..."
+              curl -sf http://backend:{{ .Values.backend.port }}/api/health && echo " ✅ Backend OK" || echo " ⚠️ Backend not ready"
+
+              echo "Checking frontend..."
+              curl -sf http://frontend:{{ .Values.frontend.port }} && echo " ✅ Frontend OK" || echo " ⚠️ Frontend not ready"
+
+              echo "=== Deploy completed successfully! ==="
+{{- end }}
