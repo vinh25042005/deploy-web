@@ -109,6 +109,13 @@
         kubectl apply -f https://raw.githubusercontent.com/vinh25042005/deploy-web/capstone-week5/argocd/root.yaml
       changed_when: false
 
+    - name: Install ArgoCD Image Updater (tự động deploy image mới)
+      shell: |
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
+        kubectl wait --for=condition=available --timeout=2m \
+          -n argocd deployment/argocd-image-updater
+      changed_when: false
+
     - name: Get AWS region
       shell: curl -s http://169.254.169.254/latest/meta-data/placement/region
       register: aws_region
