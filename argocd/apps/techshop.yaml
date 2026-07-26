@@ -10,6 +10,8 @@ metadata:
     argocd-image-updater.argoproj.io/frontend.update-strategy: newest-build
     argocd-image-updater.argoproj.io/backend.force-update: "true"
     argocd-image-updater.argoproj.io/frontend.force-update: "true"
+    argocd-image-updater.argoproj.io/backend.helm.image-spec: images.backend
+    argocd-image-updater.argoproj.io/frontend.helm.image-spec: images.frontend
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
