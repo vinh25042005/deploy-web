@@ -6,6 +6,8 @@ kind: CronJob
 metadata:
   name: postgres-backup
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   schedule: "{{ .Values.postgres.backup.schedule }}"
   jobTemplate:

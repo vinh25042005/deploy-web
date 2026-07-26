@@ -3,12 +3,13 @@ kind: Ingress
 metadata:
   name: techshop-ingress
   namespace: {{ .Values.namespace }}
-  {{- if .Values.ingress.tls.enabled }}
   annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    {{- if .Values.ingress.tls.enabled }}
     cert-manager.io/cluster-issuer: techshop-selfsigned-issuer
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-  {{- end }}
+    {{- end }}
 spec:
   ingressClassName: nginx
   tls:

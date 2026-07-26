@@ -6,6 +6,8 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app: backend
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   replicas: {{ .Values.backend.replicas }}
   selector:
@@ -65,6 +67,8 @@ kind: Service
 metadata:
   name: backend
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   ports:
     - port: {{ .Values.backend.port }}

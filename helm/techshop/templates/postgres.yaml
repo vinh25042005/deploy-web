@@ -6,6 +6,8 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   serviceName: postgres
   replicas: {{ .Values.postgres.replicas }}
@@ -49,6 +51,8 @@ kind: Service
 metadata:
   name: postgres
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   ports:
     - port: {{ .Values.postgres.port }}

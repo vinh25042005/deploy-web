@@ -6,6 +6,8 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     release: {{ .Release.Name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   groups:
     - name: techshop
