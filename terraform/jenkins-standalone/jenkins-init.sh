@@ -92,8 +92,9 @@ sudo docker exec -u root jenkins bash -c "
 # ─── Cài nvm + Node 18/20 trong container ───
 echo "Installing nvm and multiple Node versions..."
 sudo docker exec -u root jenkins bash -c "
-  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-  export NVM_DIR=/var/jenkins_home/.nvm
+  NVM_DIR=/var/jenkins_home/.nvm
+  mkdir -p \$NVM_DIR
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | NVM_DIR=\$NVM_DIR bash
   [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
   nvm install 18
   nvm install 20

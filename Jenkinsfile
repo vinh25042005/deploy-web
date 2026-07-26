@@ -71,25 +71,51 @@ pipeline {
 
         stage('Lint & Test') {
             when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
-            parallel {
-                stage('Backend Test') {
-                    steps {
-                        dir('app-source/backend') {
-                            sh """
-                                npm ci
-                                npm run lint 2>/dev/null || true
-                                npm test 2>/dev/null || true
-                            """
-                        }
+            matrix {
+                axes {
+                    axis {
+                        name 'NODE_VERSION'
+                        values '18', '20', '22'
                     }
                 }
-                stage('Frontend Test') {
-                    steps {
-                        dir('app-source/frontend') {
+                stages {
+                    stage('Backend (Node $NODE_VERSION)') {
+                        steps {
                             sh """
-                                npm ci
-                                npx tsc --noEmit 2>/dev/null || true
+                                rm -rf app-source-backend-${NODE_VERSION}
+                                cp -r app-source/backend app-source-backend-${NODE_VERSION}
                             """
+                            dir("app-source-backend-${NODE_VERSION}") {
+                                sh """#!/bin/bash
+                                    if [ "${NODE_VERSION}" != "22" ]; then
+                                        export NVM_DIR=/var/jenkins_home/.nvm
+                                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+                                        nvm use ${NODE_VERSION}
+                                    fi
+                                    npm ci
+                                    npm run lint 2>/dev/null || true
+                                    npm test 2>/dev/null || true
+                                """
+                            }
+                        }
+                    }
+                    stage('Frontend (Node $NODE_VERSION)') {
+                        steps {
+                            sh """
+                                rm -rf app-source-frontend-${NODE_VERSION}
+                                cp -r app-source/frontend app-source-frontend-${NODE_VERSION}
+                            """
+                            dir("app-source-frontend-${NODE_VERSION}") {
+                                sh """#!/bin/bash
+                                    if [ "${NODE_VERSION}" != "22" ]; then
+                                        export NVM_DIR=/var/jenkins_home/.nvm
+                                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+                                        nvm use ${NODE_VERSION}
+                                    fi
+                                    npm ci
+                                    npx tsc --noEmit 2>/dev/null || true
+                                """
+                            }
                         }
                     }
                 }
