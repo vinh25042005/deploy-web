@@ -117,6 +117,19 @@
           -n argocd deployment/argocd-image-updater-controller
       changed_when: false
 
+    - name: Create self-signed ClusterIssuer (cho Ingress TLS, tránh ArgoCD health check issue)
+      shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: techshop-selfsigned-issuer
+        spec:
+          selfSigned: {}
+        EOF
+        kubectl wait --for=condition=ready --timeout=60s clusterissuer/techshop-selfsigned-issuer 2>/dev/null || true
+      changed_when: false
+
     - name: Get AWS region
       shell: curl -s http://169.254.169.254/latest/meta-data/placement/region
       register: aws_region
