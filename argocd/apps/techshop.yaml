@@ -26,6 +26,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: techshop-dev
+  ignoreResourceDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/replicas
+        - /status
   syncPolicy:
     automated:
       prune: true

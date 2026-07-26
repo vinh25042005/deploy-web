@@ -62,16 +62,8 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_security_group" "jenkins" {
   name        = "${var.project_name}-jenkins-sg"
-  description = "Allow Jenkins web UI + SSH"
+  description = "SSH only, Jenkins via port-forward"
   vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description = "Jenkins Web UI"
-    from_port   = var.jenkins_port
-    to_port     = var.jenkins_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   ingress {
     description = "SSH"

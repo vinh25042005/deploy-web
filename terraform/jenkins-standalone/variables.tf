@@ -12,7 +12,8 @@ variable "region" {
 
 variable "key_name" {
   type        = string
-  description = "SSH key pair name (tạo trong AWS Console trước)"
+  default     = "techshop-key"
+  description = "SSH key pair name"
 }
 
 variable "instance_type" {
