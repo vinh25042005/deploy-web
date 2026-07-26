@@ -101,15 +101,6 @@ sudo docker exec -u root jenkins bash -c "
   chown -R 1000:1000 \$NVM_DIR
 "
 
-# ─── Cài kubectl trong container ───
-echo "Installing kubectl inside Jenkins container..."
-sudo docker exec -u root jenkins bash -c "
-  curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-  echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' > /etc/apt/sources.list.d/kubernetes.list
-  apt-get update -qq 2>/dev/null && apt-get install -y -qq kubectl 2>&1 | tail -3
-  kubectl version --client 2>&1 | head -1
-"
-
 # ─── Cài plugins ───
 echo "Installing plugins..."
 sudo docker exec jenkins jenkins-plugin-cli --plugins \

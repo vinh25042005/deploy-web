@@ -136,11 +136,9 @@ pipeline {
                             docker build -f backend/Dockerfile \\
                                 -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
                                 -t ${REGISTRY_BASE}/deploy-web-backend:${params.ENV} \
-                                -t ${REGISTRY_BASE}/deploy-web-backend:latest \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
                             docker push ${REGISTRY_BASE}/deploy-web-backend:${params.ENV}
-                            docker push ${REGISTRY_BASE}/deploy-web-backend:latest
                         """
                     }
                 }
@@ -193,11 +191,9 @@ pipeline {
                                 --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
                                 -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
                                 -t ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV} \
-                                -t ${REGISTRY_BASE}/deploy-web-frontend:latest \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
                             docker push ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV}
-                            docker push ${REGISTRY_BASE}/deploy-web-frontend:latest
                         """
                     }
                 }
@@ -231,23 +227,6 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'app-source/trivy-frontend.txt, app-source/trivy-frontend.sarif, app-source/sbom-frontend.spdx.json', allowEmptyArchive: true
-                }
-            }
-        }
-
-        stage('Deploy to ArgoCD') {
-            when { expression { !params.SKIP_BUILD } }
-            steps {
-                script {
-                    def ns = "techshop-dev"
-                    def appName = "techshop-dev"
-
-                    sh """
-                        aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig --query Parameter.Value --output text | base64 -d | gzip -d > /tmp/kubeconfig
-                        kubectl --kubeconfig=/tmp/kubeconfig rollout restart deployment/backend -n ${ns} 2>/dev/null || true
-                        kubectl --kubeconfig=/tmp/kubeconfig rollout restart deployment/frontend -n ${ns} 2>/dev/null || true
-                        echo "✅ Rollout triggered for ${appName}"
-                    """
                 }
             }
         }
