@@ -235,6 +235,23 @@ pipeline {
             }
         }
 
+        stage('Deploy to ArgoCD') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                script {
+                    def ns = "techshop-dev"
+                    def appName = "techshop-dev"
+
+                    sh """
+                        aws ssm get-parameter --region ap-southeast-1 --name /k8s/kubeconfig --query Parameter.Value --output text | base64 -d | gzip -d > /tmp/kubeconfig
+                        kubectl --kubeconfig=/tmp/kubeconfig rollout restart deployment/backend -n ${ns} 2>/dev/null || true
+                        kubectl --kubeconfig=/tmp/kubeconfig rollout restart deployment/frontend -n ${ns} 2>/dev/null || true
+                        echo "✅ Rollout triggered for ${appName}"
+                    """
+                }
+            }
+        }
+
     }
 
     post {
