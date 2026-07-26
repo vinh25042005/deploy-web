@@ -97,12 +97,59 @@ resource "aws_security_group" "jenkins" {
   tags = { Name = "${var.project_name}-jenkins-sg" }
 }
 
+# ── IAM Role cho Jenkins (truy cập SSM lấy kubeconfig) ──
+data "aws_iam_policy_document" "ec2_trust" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "jenkins" {
+  name               = "${var.project_name}-jenkins-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_trust.json
+}
+
+resource "aws_iam_role_policy_attachment" "jenkins_ssm" {
+  role       = aws_iam_role.jenkins.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy" "jenkins_ssm_params" {
+  name = "${var.project_name}-jenkins-ssm"
+  role = aws_iam_role.jenkins.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParametersByPath"]
+        Resource = "arn:aws:ssm:${var.region}:*:parameter/k8s/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "jenkins" {
+  name = "${var.project_name}-jenkins-profile"
+  role = aws_iam_role.jenkins.name
+}
+
 resource "aws_instance" "jenkins" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.jenkins.id]
   key_name               = var.key_name
+  iam_instance_profile   = aws_iam_instance_profile.jenkins.name
+
+  metadata_options {
+    http_put_response_hop_limit = 2
+    http_tokens                 = "required"
+  }
 
   root_block_device {
     volume_size = var.disk_size

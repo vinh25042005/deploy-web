@@ -89,6 +89,28 @@ sudo docker exec -u root jenkins bash -c "
   syft --version
 "
 
+# ─── Cài AWS CLI + lấy kubeconfig từ SSM ───
+echo "Installing AWS CLI and getting kubeconfig..."
+sudo apt-get install -y -qq awscli 2>&1 | tail -1
+sudo docker exec -u root jenkins bash -c "
+  apt-get update -qq 2>/dev/null
+  apt-get install -y -qq awscli 2>&1 | tail -1
+" 2>&1 || true
+
+# Lấy kubeconfig từ SSM (do master node upload) và copy vào container
+for i in \$(seq 1 10); do
+  KUBECONFIG_B64=\$(aws ssm get-parameter --name /k8s/kubeconfig --region ap-southeast-1 --with-decryption --query Parameter.Value --output text 2>/dev/null || echo "")
+  if [ -n "\$KUBECONFIG_B64" ]; then
+    echo "\$KUBECONFIG_B64" | base64 -d | gunzip | sudo tee /jenkins-home/.kube/config > /dev/null 2>&1 && {
+      sudo chown -R 1000:1000 /jenkins-home/.kube
+      echo "kubeconfig loaded from SSM"
+      break
+    }
+  fi
+  echo "Waiting for kubeconfig in SSM... (\$i/10)"
+  sleep 30
+done
+
 # ─── Cài nvm + Node 18/20 trong container ───
 echo "Installing nvm and multiple Node versions..."
 sudo docker exec -u root jenkins bash -c "
@@ -100,6 +122,22 @@ sudo docker exec -u root jenkins bash -c "
   nvm install 20
   chown -R 1000:1000 \$NVM_DIR
 "
+
+# ─── Cài kubectl trong container ───
+echo "Installing kubectl inside Jenkins container..."
+sudo docker exec -u root jenkins bash -c "
+  curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+  chmod +x /usr/local/bin/kubectl
+  kubectl version --client 2>&1 | head -1
+"
+
+# ⚠️  NOTE: Sau khi destroy+apply, cần copy kubeconfig vào container:
+#   cat ~/.kube/config | ssh -i ~/.ssh/techshop-key.pem ubuntu@<JENKINS_IP> '
+#     sudo tee /jenkins-home/.kube/config > /dev/null
+#     sudo chown -R 1000:1000 /jenkins-home/.kube
+#   '
+# Và cài ArgoCD Image Updater vào cluster:
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/v1.2.2/config/install.yaml
 
 # ─── Cài plugins ───
 echo "Installing plugins..."
