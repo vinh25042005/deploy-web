@@ -111,9 +111,9 @@
 
     - name: Install ArgoCD Image Updater (tự động deploy image mới)
       shell: |
-        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
+        kubectl apply -k https://github.com/argoproj-labs/argocd-image-updater/config/default 2>/dev/null
         kubectl wait --for=condition=available --timeout=2m \
-          -n argocd deployment/argocd-image-updater
+          -n argocd deployment/argocd-image-updater-controller
       changed_when: false
 
     - name: Get AWS region
