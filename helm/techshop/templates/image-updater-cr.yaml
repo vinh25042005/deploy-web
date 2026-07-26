@@ -1,0 +1,14 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: techshop-images
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  writeBackConfig:
+    method: argocd
+  applicationRefs:
+    - namePattern: "techshop-dev"
+      useAnnotations: true
+
