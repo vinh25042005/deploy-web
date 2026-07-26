@@ -4,7 +4,7 @@ kind: ClusterIssuer
 metadata:
   name: techshop-selfsigned-issuer
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "5"
 spec:
   selfSigned: {}
 
@@ -15,7 +15,7 @@ metadata:
   name: techshop-tls
   namespace: {{ .Values.namespace }}
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "5"
     cert-manager.io/disable-validation: "true"
 spec:
   secretName: {{ .Values.ingress.tlsSecret }}
