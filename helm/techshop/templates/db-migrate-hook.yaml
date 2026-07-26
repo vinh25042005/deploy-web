@@ -16,8 +16,15 @@ spec:
       containers:
         - name: migrate
           image: {{ .Values.images.backend }}
-          command: ["npx", "prisma", "db", "push"]
-          envFrom:
-            - configMapRef: { name: backend-config }
-            - secretRef: { name: backend-secrets }
+          command:
+            - sh
+            - -c
+            - |
+              echo "Running Prisma migration..."
+              npx prisma db push
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.config.databaseUrl | quote }}
+            - name: JWT_SECRET
+              value: {{ .Values.config.jwtSecret | quote }}
 {{- end }}
