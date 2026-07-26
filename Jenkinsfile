@@ -233,6 +233,8 @@ pipeline {
 
     }
 
+    }
+
     post {
         success { echo "✅ CI thành công! ArgoCD sẽ deploy ${params.ENV} @ ${IMAGE_TAG}" }
         failure { echo "❌ CI thất bại!" }
