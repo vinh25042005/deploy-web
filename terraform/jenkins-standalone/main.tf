@@ -62,7 +62,7 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_security_group" "jenkins" {
   name        = "${var.project_name}-jenkins-sg"
-  description = "SSH only, Jenkins via port-forward"
+  description = "SSH + GitHub webhook IPs for Jenkins"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -71,6 +71,20 @@ resource "aws_security_group" "jenkins" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # GitHub webhook IPs cho Jenkins webhook trigger
+  ingress {
+    description = "GitHub Webhook"
+    from_port   = var.jenkins_port
+    to_port     = var.jenkins_port
+    protocol    = "tcp"
+    cidr_blocks = [
+      "192.30.252.0/22",
+      "185.199.108.0/22",
+      "140.82.112.0/20",
+      "143.55.64.0/20",
+    ]
   }
 
   egress {
