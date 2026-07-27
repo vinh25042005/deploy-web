@@ -15,17 +15,17 @@ spec:
       restartPolicy: Never
       containers:
         - name: health-check
-          image: curlimages/curl:latest
+          image: busybox:1.36
           command:
             - sh
             - -c
             - |
               echo "=== Deploy Health Check ==="
               echo "Checking backend..."
-              curl -sf http://backend:{{ .Values.backend.port }}/api/health && echo " ✅ Backend OK" || echo " ⚠️ Backend not ready"
+              wget -qO- http://backend:{{ .Values.backend.port }}/api/health && echo " ✅ Backend OK" || echo " ⚠️ Backend not ready"
 
               echo "Checking frontend..."
-              curl -sf http://frontend:{{ .Values.frontend.port }} && echo " ✅ Frontend OK" || echo " ⚠️ Frontend not ready"
+              wget -qO- http://frontend:{{ .Values.frontend.port }} && echo " ✅ Frontend OK" || echo " ⚠️ Frontend not ready"
 
               echo "=== Deploy completed successfully! ==="
 {{- end }}
