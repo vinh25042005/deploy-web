@@ -139,6 +139,21 @@
           -n argocd deployment/argocd-image-updater-controller
       changed_when: false
 
+    - name: Create ImageUpdater CR (Git write-back, dùng annotations từ Application)
+      shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+        kind: ImageUpdater
+        metadata:
+          name: techshop-images
+          namespace: argocd
+        spec:
+          applicationRefs:
+            - namePattern: "techshop-dev"
+              useAnnotations: true
+        EOF
+      changed_when: false
+
     - name: Create self-signed ClusterIssuer (cho Ingress TLS, tránh ArgoCD health check issue)
       shell: |
         kubectl apply -f - <<'EOF'
