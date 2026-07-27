@@ -157,6 +157,39 @@
         EOF
       changed_when: false
 
+    - name: Create Docker Hub credentials secret (cho Image Updater scan registry)
+      shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: dockerhub-creds
+          namespace: argocd
+        stringData:
+          username: vinh2504
+          password: {{ dockerhub_pat | default('') }}
+        EOF
+      changed_when: false
+
+    - name: Add registry configuration for Image Updater
+      shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: registries-config
+          namespace: argocd
+        data:
+          registries.conf: |
+            registries:
+            - name: Docker Hub
+              prefix: docker.io
+              api_url: https://registry-1.docker.io
+              credentials: secret:argocd/dockerhub-creds
+              defaultns: library
+        EOF
+      changed_when: false
+
     - name: Create ImageUpdater CR (Git write-back, dùng annotations từ Application)
       shell: |
         kubectl apply -f - <<'EOF'
