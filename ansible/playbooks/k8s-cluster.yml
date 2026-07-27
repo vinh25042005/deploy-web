@@ -126,7 +126,7 @@
           --dry-run=client -o yaml | kubectl apply -f -
       changed_when: false
 
-    - name: Patch Image Updater deployment to use Git credentials
+    - name: Patch Git credentials + mount registry config into Image Updater
       shell: |
         kubectl patch deployment argocd-image-updater-controller -n argocd \
           --type=json \
@@ -171,23 +171,19 @@
         EOF
       changed_when: false
 
-    - name: Add registry configuration for Image Updater
+    - name: Patch Git credentials + Docker Hub env vars into Image Updater
       shell: |
-        kubectl apply -f - <<'EOF'
-        apiVersion: v1
-        kind: ConfigMap
-        metadata:
-          name: registries-config
-          namespace: argocd
-        data:
-          registries.conf: |
-            registries:
-            - name: Docker Hub
-              prefix: docker.io
-              api_url: https://registry-1.docker.io
-              credentials: secret:argocd/dockerhub-creds
-              defaultns: library
-        EOF
+        kubectl patch deployment argocd-image-updater-controller -n argocd \
+          --type=json \
+          -p='[{"op":"add","path":"/spec/template/spec/containers/0/env","value":[
+            {"name":"ARGOCD_IMAGE_UPDATER_GIT_CREDENTIALS_USERNAME","valueFrom":{"secretKeyRef":{"name":"argocd-image-updater-git-credentials","key":"username"}}},
+            {"name":"ARGOCD_IMAGE_UPDATER_GIT_CREDENTIALS_PASSWORD","valueFrom":{"secretKeyRef":{"name":"argocd-image-updater-git-credentials","key":"password"}}},
+            {"name":"REGISTRY_USERNAME","valueFrom":{"secretKeyRef":{"name":"dockerhub-creds","key":"username"}}},
+            {"name":"REGISTRY_PASSWORD","valueFrom":{"secretKeyRef":{"name":"dockerhub-creds","key":"password"}}}
+          ]}]'
+        kubectl rollout restart -n argocd deployment/argocd-image-updater-controller
+        kubectl wait --for=condition=available --timeout=2m \
+          -n argocd deployment/argocd-image-updater-controller
       changed_when: false
 
     - name: Create ImageUpdater CR (Git write-back, dùng annotations từ Application)
@@ -200,7 +196,7 @@
           namespace: argocd
         spec:
           applicationRefs:
-            - namePattern: "techshop-dev"
+            - namePattern: "techshop-*"
               useAnnotations: true
         EOF
       changed_when: false
