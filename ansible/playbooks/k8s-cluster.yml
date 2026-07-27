@@ -139,6 +139,24 @@
           -n argocd deployment/argocd-image-updater-controller
       changed_when: false
 
+    - name: Add repository credential to ArgoCD (cho Image Updater push code)
+      shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: repo-deploy-web
+          namespace: argocd
+          labels:
+            argocd.argoproj.io/secret-type: repository
+        stringData:
+          type: git
+          url: https://github.com/vinh25042005/deploy-web.git
+          username: vinh25042005
+          password: {{ github_token }}
+        EOF
+      changed_when: false
+
     - name: Create ImageUpdater CR (Git write-back, dùng annotations từ Application)
       shell: |
         kubectl apply -f - <<'EOF'
