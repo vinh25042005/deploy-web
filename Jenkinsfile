@@ -235,5 +235,18 @@ pipeline {
     post {
         success { echo "✅ CI thành công! ArgoCD sẽ deploy ${params.ENV} @ ${IMAGE_TAG}" }
         failure { echo "❌ CI thất bại!" }
+        always {
+            script {
+                dir('app-source') {
+                    sh """
+                        echo '>>> Cleaning old Docker images (keep newest 3)...'
+                        docker images '${REGISTRY_BASE}/deploy-web-backend' --format '{{.ID}}' | sort -u | tail -n +4 | xargs -r docker rmi -f 2>/dev/null || true
+                        docker images '${REGISTRY_BASE}/deploy-web-frontend' --format '{{.ID}}' | sort -u | tail -n +4 | xargs -r docker rmi -f 2>/dev/null || true
+                        docker system prune -f --filter 'until=24h' 2>/dev/null || true
+                        echo '>>> Cleanup done'
+                    """
+                }
+            }
+        }
     }
 }
