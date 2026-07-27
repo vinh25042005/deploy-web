@@ -18,6 +18,8 @@ spec:
       labels:
         app: frontend
     spec:
+      imagePullSecrets:
+        - name: dockerhub-secret
       containers:
         - name: frontend
           image: {{ .Values.images.frontend }}

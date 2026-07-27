@@ -205,6 +205,19 @@
         EOF
       changed_when: false
 
+    - name: Create Docker Hub imagePullSecret (cho node pull image khỏi rate limit)
+      shell: |
+        kubectl create secret docker-registry dockerhub-secret \
+          -n {{ item }} \
+          --docker-server=docker.io \
+          --docker-username=vinh2504 \
+          --docker-password={{ dockerhub_pat }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+      loop:
+        - techshop-dev
+        - argocd
+      changed_when: false
+
     - name: Create self-signed ClusterIssuer (cho Ingress TLS, tránh ArgoCD health check issue)
       shell: |
         kubectl apply -f - <<'EOF'
