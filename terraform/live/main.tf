@@ -20,6 +20,11 @@ provider "aws" {
   profile = var.aws_profile
 }
 
+# ── SSM parameter: GitHub token cho ArgoCD Image Updater ──
+data "aws_ssm_parameter" "github_token" {
+  name = "/techshop/github-token"
+}
+
 # ── Locals ──
 locals {
   env = terraform.workspace
@@ -215,7 +220,8 @@ resource "null_resource" "ansible" {
       echo ">>> Running Ansible (retry up to 3 times, timeout 20m)..."
       cd "$(dirname "$INVENTORY")"
       for i in $(seq 1 3); do
-        if timeout 1200 ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml; then
+        if timeout 1200 ansible-playbook -i inventory.ini playbooks/k8s-cluster.yml \
+          --extra-vars "github_token=${nonsensitive(data.aws_ssm_parameter.github_token.value)}"; then
           echo ">>> Ansible completed successfully!"
           exit 0
         fi

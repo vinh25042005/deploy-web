@@ -5,7 +5,10 @@ metadata:
   namespace: argocd
   annotations:
     argocd-image-updater.argoproj.io/image-list: backend=docker.io/vinh2504/deploy-web-backend,frontend=docker.io/vinh2504/deploy-web-frontend
-    argocd-image-updater.argoproj.io/write-back-method: argocd
+    argocd-image-updater.argoproj.io/write-back-method: git:https://github.com/vinh25042005/deploy-web.git
+    argocd-image-updater.argoproj.io/git-branch: capstone-week5
+    argocd-image-updater.argoproj.io/git-user: vinh25042005
+    argocd-image-updater.argoproj.io/git-email: vinh2504@gmail.com
     argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
     argocd-image-updater.argoproj.io/frontend.update-strategy: newest-build
     argocd-image-updater.argoproj.io/backend.force-update: "true"
