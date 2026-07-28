@@ -112,7 +112,6 @@ pipeline {
                                         nvm use ${NODE_VERSION}
                                     fi
                                     npm ci
-                                    npx tsc --noEmit 2>/dev/null || true
                                 """
                             }
                         }
