@@ -4,5 +4,5 @@ helm:
     value: docker.io/vinh2504/deploy-web-backend:dev
     forcestring: true
   - name: images.frontend
-    value: docker.io/vinh2504/deploy-web-frontend:dev-fc039e4
+    value: docker.io/vinh2504/deploy-web-frontend:stg-f1844dc
     forcestring: true
