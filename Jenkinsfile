@@ -112,6 +112,7 @@ pipeline {
                                         nvm use ${NODE_VERSION}
                                     fi
                                     npm ci
+                                    npx tsc --noEmit 2>/dev/null || true
                                 """
                             }
                         }
@@ -239,6 +240,10 @@ pipeline {
                         passwordVariable: 'GIT_PASS'
                     )]) {
                         script {
+                            def commitAuthor = sh(
+                                script: 'cd ../app-source && git log -1 --format="%an <%ae>"',
+                                returnStdout: true
+                            ).trim()
                             def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}" : ''
                             def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
                             sh """
@@ -264,7 +269,7 @@ pipeline {
                                 git config user.name "jenkins-ci"
                                 git add helm/techshop/.argocd-source-techshop-dev.yaml
                                 git diff --cached --quiet && echo "No changes to commit" || {
-                                    git commit -m "deploy ${IMAGE_TAG} (build #${BUILD_NUMBER})"
+                                    git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER})"
                                     git push https://\${GIT_USER}:\${GIT_PASS}@github.com/vinh25042005/deploy-web.git HEAD:capstone-week5
                                     echo "✅ Pushed tag ${IMAGE_TAG} to Git"
                                 }
