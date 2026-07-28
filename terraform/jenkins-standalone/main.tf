@@ -162,3 +162,10 @@ resource "aws_instance" "jenkins" {
     jenkins_port = var.jenkins_port
   })
 }
+
+# ── Elastic IP (tĩnh) cho Jenkins ──
+resource "aws_eip" "jenkins" {
+  domain     = "vpc"
+  instance   = aws_instance.jenkins.id
+  tags       = { Name = "${var.project_name}-jenkins-eip" }
+}
