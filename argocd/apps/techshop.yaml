@@ -4,7 +4,7 @@ metadata:
   name: techshop-dev
   namespace: argocd
   annotations:
-    argocd-image-updater.argoproj.io/image-list: backend=docker.io/vinh2504/deploy-web-backend,frontend=docker.io/vinh2504/deploy-web-frontend
+    argocd-image-updater.argoproj.io/image-list: backend=docker.io/vinh2504/deploy-web-backend:dev,frontend=docker.io/vinh2504/deploy-web-frontend:dev
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/git-repository: https://github.com/vinh25042005/deploy-web.git
     argocd-image-updater.argoproj.io/git-branch: capstone-week5
