@@ -16,7 +16,7 @@ pipeline {
     environment {
         REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-        IMAGE_TAG = "${params.ENV}-${GIT_COMMIT_SHORT}"
+        IMAGE_TAG = "${params.ENV}-${BUILD_NUMBER}"
 
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
         APP_BRANCH = "${params.APP_REPO_BRANCH}"
@@ -226,6 +226,52 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'app-source/trivy-frontend.txt, app-source/trivy-frontend.sarif, app-source/sbom-frontend.spdx.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Commit tag to Git') {
+            when { expression { env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false' } }
+            steps {
+                dir('deploy-web') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-token',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_PASS'
+                    )]) {
+                        script {
+                            def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}" : ''
+                            def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
+                            sh """
+                                echo 'helm:' > helm/techshop/.argocd-source-techshop-dev.yaml
+                                echo '  parameters:' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                            """
+                            if (backendTag) {
+                                sh """
+                                    echo '  - name: images.backend' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                    echo '    value: ${backendTag}' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                    echo '    forcestring: true' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                """
+                            }
+                            if (frontendTag) {
+                                sh """
+                                    echo '  - name: images.frontend' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                    echo '    value: ${frontendTag}' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                    echo '    forcestring: true' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                """
+                            }
+                            sh """
+                                git config user.email "jenkins@techshop.local"
+                                git config user.name "jenkins-ci"
+                                git add helm/techshop/.argocd-source-techshop-dev.yaml
+                                git diff --cached --quiet && echo "No changes to commit" || {
+                                    git commit -m "deploy ${IMAGE_TAG} (build #${BUILD_NUMBER})"
+                                    git push https://\${GIT_USER}:\${GIT_PASS}@github.com/vinh25042005/deploy-web.git HEAD:capstone-week5
+                                    echo "✅ Pushed tag ${IMAGE_TAG} to Git"
+                                }
+                            """
+                        }
+                    }
                 }
             }
         }
