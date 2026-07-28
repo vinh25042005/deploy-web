@@ -18,6 +18,10 @@ build/
 # IDE
 .vscode/
 .idea/
+
+# ArgoCD app files (stg/prd - apply manually when needed)
+argocd/apps/techshop-stg.yaml
+argocd/apps/techshop-prd.yaml
 *.swp
 *.swo
 

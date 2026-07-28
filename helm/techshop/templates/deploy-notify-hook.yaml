@@ -1,5 +1,4 @@
 {{- if and .Values.backend.enabled .Values.frontend.enabled }}
-# ── PostSync Hook: kiểm tra health sau khi deploy thành công ──
 apiVersion: batch/v1
 kind: Job
 metadata:

@@ -201,6 +201,11 @@
         EOF
       changed_when: false
 
+    - name: Create namespaces for imagePullSecret
+      shell: |
+        kubectl create namespace techshop-dev --dry-run=client -o yaml | kubectl apply -f -
+      changed_when: false
+
     - name: Create Docker Hub imagePullSecret (cho node pull image khỏi rate limit)
       shell: |
         kubectl create secret docker-registry dockerhub-secret \

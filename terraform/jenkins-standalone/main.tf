@@ -73,7 +73,7 @@ resource "aws_security_group" "jenkins" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # GitHub webhook IPs cho Jenkins webhook trigger
+  # GitHub webhook IPs 
   ingress {
     description = "GitHub Webhook"
     from_port   = var.jenkins_port
@@ -97,7 +97,7 @@ resource "aws_security_group" "jenkins" {
   tags = { Name = "${var.project_name}-jenkins-sg" }
 }
 
-# ── IAM Role cho Jenkins (truy cập SSM lấy kubeconfig) ──
+# ── IAM Role cho Jenkins ──
 data "aws_iam_policy_document" "ec2_trust" {
   statement {
     actions = ["sts:AssumeRole"]
