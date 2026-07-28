@@ -121,6 +121,24 @@ pipeline {
             }
         }
 
+        stage('SonarQube Scan') {
+            when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
+            steps {
+                dir('app-source') {
+                    sh """
+                        sonar-scanner \
+                            -Dsonar.projectKey=techshop-app \
+                            -Dsonar.sources=frontend/src,backend/src \
+                            -Dsonar.host.url=http://172.18.0.2:9000 \
+                            -Dsonar.token=squ_a04035f1d3872eaf07d0d0a9f27e7b21946e24d9 \
+                            -Dsonar.qualitygate.wait=false \
+                            -Dsonar.exclusions=**/node_modules/**,**/*.test.ts,**/*.spec.ts \
+                            -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info 2>&1 || true
+                    """
+                }
+            }
+        }
+
         stage('Build & Push Backend') {
             when { expression { !params.SKIP_BUILD && !params.SKIP_BACKEND && env.BUILD_BACKEND != 'false' } }
             steps {
