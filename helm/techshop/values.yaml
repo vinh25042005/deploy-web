@@ -37,7 +37,7 @@ postgres:
   # ↑ backup CronJob vẫn dùng secretRef này (Vault Agent không hỗ trợ CronJob)
   storage:
     size: 10Gi
-    className: techshop-ssd-immediate
+    className: techshop-ssm-waitforfirstconsumer
   backup:
     enabled: true
     schedule: "0 */6 * * *"           # 6 giờ 1 lần
