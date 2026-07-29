@@ -7,10 +7,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "-2"
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: ebs.csi.aws.com
-volumeBindingMode: Immediate
+volumeBindingMode: WaitForFirstConsumer
 parameters:
   type: gp3
   encrypted: "true"
 allowVolumeExpansion: true
-reclaimPolicy: Retain
+reclaimPolicy: Delete
 {{- end }}
