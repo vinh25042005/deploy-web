@@ -89,8 +89,8 @@ spec:
         - pause: { duration: 30 }
         - setWeight: 80
         - pause: { duration: 30 }
-      trafficRouting:
-        smi: {}
+      stableService: backend
+      canaryService: backend-canary
 ---
 apiVersion: v1
 kind: Service
