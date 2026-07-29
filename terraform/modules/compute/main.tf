@@ -92,7 +92,7 @@ resource "aws_instance" "ingress" {
   count                  = var.ingress_count
   ami                    = data.aws_ami.ubuntu.id
   iam_instance_profile   = aws_iam_instance_profile.node_ssm.name
-  instance_type          = var.instance_type
+  instance_type          = var.ingress_instance_type
   subnet_id              = var.ingress_subnet_ids[count.index % length(var.ingress_subnet_ids)]
   vpc_security_group_ids = var.ingress_sg_ids
   key_name               = var.key_name

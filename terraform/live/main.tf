@@ -48,6 +48,7 @@ module "compute" {
   subnet_ids    = [module.network.public_subnet_a_id, module.network.private_subnet_a_id, module.network.private_subnet_b_id]
   sg_ids        = [module.network.sg_allow_internal_id, module.network.sg_allow_https_id]
   instance_type = var.instance_type
+  ingress_instance_type = var.ingress_instance_type
   node_count    = var.node_count
   key_name      = var.key_name
   # ── Ingress nodes (public subnet) ──

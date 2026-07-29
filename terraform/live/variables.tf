@@ -21,7 +21,14 @@ variable "key_name" {
 
 variable "instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "t3.large"
+  description = "EC2 instance type cho K8s control-plane nodes"
+}
+
+variable "ingress_instance_type" {
+  type    = string
+  default = "t3.small"
+  description = "EC2 instance type cho ingress nodes (only NGINX runs here)"
 }
 
 variable "node_count" {

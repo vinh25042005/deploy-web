@@ -28,6 +28,11 @@ variable "instance_type" {
   default = "t3.small"
 
 }
+variable "ingress_instance_type" {
+  type    = string
+  default = "t3.small"
+
+}
 variable "node_count" {
   type    = number
   default = 3
