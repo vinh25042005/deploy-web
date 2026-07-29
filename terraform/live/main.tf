@@ -270,6 +270,11 @@ resource "helm_release" "vault" {
         size: 10Gi
         storageClass: techshop-ssm-waitforfirstconsumer
         accessMode: ReadWriteOnce
+      readinessProbe:
+        initialDelaySeconds: 5
+        timeoutSeconds: 10
+        periodSeconds: 10
+        failureThreshold: 6
     injector:
       enabled: true
     YAML
