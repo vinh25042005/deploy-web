@@ -237,9 +237,41 @@ resource "null_resource" "ansible" {
   }
 }
 
+# ── Wait for K8s API server + update kubeconfig từ SSM ──
+resource "terraform_data" "wait_k8s_api" {
+  depends_on = [null_resource.ansible]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo ">>> Waiting for K8s API server..."
+      for i in $(seq 1 30); do
+        # Tải kubeconfig mới từ SSM (Ansible upload lên sau khi init cluster)
+        SSM_KUBECONFIG=$(aws ssm get-parameter --name "/k8s/kubeconfig" \
+          --with-decryption --region ${var.region} \
+          --query Parameter.Value --output text 2>/dev/null || echo "")
+        
+        if [ -n "$SSM_KUBECONFIG" ]; then
+          echo "$SSM_KUBECONFIG" | base64 -d | gunzip > ~/.kube/config 2>/dev/null || true
+          chmod 600 ~/.kube/config
+          
+          # Thử kết nối API server
+          if kubectl get nodes --request-timeout=5s 2>/dev/null; then
+            echo ">>> K8s API server ready!"
+            exit 0
+          fi
+        fi
+        echo "    retry $i/30 - waiting for API server..."
+        sleep 10
+      done
+      echo "ERROR: K8s API server not reachable after 5 minutes!"
+      exit 1
+    EOT
+  }
+}
+
 # ── Vault (HashiCorp) — quản lý secret tập trung ──
 resource "helm_release" "vault" {
-  depends_on = [null_resource.ansible]
+  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api]
 
   name       = "vault"
   namespace  = "vault"
@@ -286,6 +318,7 @@ resource "helm_release" "vault" {
 
 # ── StorageClass WaitForFirstConsumer cho Vault ──
 resource "terraform_data" "vault_storageclass" {
+  depends_on = [terraform_data.wait_k8s_api]
   provisioner "local-exec" {
     command = <<-EOT
       kubectl apply -f - <<'EOF'
@@ -316,7 +349,7 @@ resource "terraform_data" "vault_init" {
 
 # ── Argo Rollouts (progressive delivery) ──
 resource "helm_release" "argo_rollouts" {
-  depends_on = [null_resource.ansible]
+  depends_on = [terraform_data.wait_k8s_api]
 
   name       = "argo-rollouts"
   namespace  = "argo-rollouts"
