@@ -39,6 +39,8 @@ coverage/
 # Prisma
 **/prisma/*.db
 
+.github/
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts
@@ -63,15 +65,11 @@ ansible/inventory.ini
 **/values-secret.yaml
 
 # Ansible
-ansible/.vault_pass
 ansible/group_vars/vault.yml
 
+# K8s secrets (prevent accidental commit)
 k8s/secret-backend.yaml
 k8s/secret-tls.yaml
-helm/techshop/env/values-secret.yaml
-
-k8s/secret-tls.yaml
-helm/techshop/env/values-secret.yaml
 
 # Terraform State (sensitive)
 **/terraform.tfstate
@@ -80,3 +78,4 @@ helm/techshop/env/values-secret.yaml
 
 # Terraform lock files (regenerated per env)
 **/.terraform.lock.hcl
+

@@ -37,6 +37,8 @@
 - name: Post-deploy tasks (cert-manager, PV, untaint)
   hosts: master[0]
   become: yes
+  vars_files:
+    - ../vars/secrets.yml
   tasks:
     - name: Remove control-plane taint from all masters
       shell: |
