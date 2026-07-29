@@ -287,7 +287,7 @@ pipeline {
                                 git config user.name "jenkins-ci"
                                 git add helm/techshop/.argocd-source-techshop-dev.yaml
                                 git diff --cached --quiet && echo "No changes to commit" || {
-                                    git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER})"
+                                    git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
                                     git push https://\${GIT_USER}:\${GIT_PASS}@github.com/vinh25042005/deploy-web.git HEAD:capstone-week5
                                     echo "✅ Pushed tag ${IMAGE_TAG} to Git"
                                 }
