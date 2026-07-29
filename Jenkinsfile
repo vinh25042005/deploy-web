@@ -130,7 +130,7 @@ pipeline {
                             -Dsonar.projectKey=techshop-app \
                             -Dsonar.sources=frontend/src,backend/src \
                             -Dsonar.host.url=http://172.18.0.2:9000 \
-                            -Dsonar.token=squ_a04035f1d3872eaf07d0d0a9f27e7b21946e24d9 \
+                            -Dsonar.token=squ_6db85e2e7ef31cd5202c92592f12ad58899c7715 \
                             -Dsonar.qualitygate.wait=false \
                             -Dsonar.exclusions=**/node_modules/**,**/*.test.ts,**/*.spec.ts \
                             -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info 2>&1 || true
