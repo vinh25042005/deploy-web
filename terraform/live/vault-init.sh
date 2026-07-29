@@ -10,8 +10,20 @@ VAULT_NS="vault"
 VAULT_POD="vault-0"
 SSM_PREFIX="/techshop"
 
-echo ">>> [1/9] Waiting for Vault pod to be ready..."
-kubectl wait --for=condition=ready -n "$VAULT_NS" "pod/$VAULT_POD" --timeout=120s
+echo ">>> [1/9] Waiting for Vault pod to be Running (not Ready — Vault needs init first)..."
+for i in $(seq 1 30); do
+  PHASE=$(kubectl get pod -n "$VAULT_NS" "$VAULT_POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  if [ "$PHASE" = "Running" ]; then
+    echo "  Pod is Running!"
+    break
+  fi
+  if [ $i -eq 30 ]; then
+    echo "ERROR: Vault pod not Running after 5 minutes!"
+    kubectl describe pod -n "$VAULT_NS" "$VAULT_POD" | tail -10
+    exit 1
+  fi
+  sleep 10
+done
 
 # ── Check if already initialized ──────────────────────────────────────────
 INIT_STATUS=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status -format=json 2>/dev/null || echo '{"initialized":false}')

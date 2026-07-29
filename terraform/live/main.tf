@@ -262,15 +262,44 @@ resource "helm_release" "vault" {
         limits:
           memory: "512Mi"
           cpu: "200m"
+      nodeSelector:
+        topology.kubernetes.io/zone: ap-southeast-1a
+      tolerations: []
+      dataStorage:
+        enabled: true
+        size: 10Gi
+        storageClass: techshop-ssm-waitforfirstconsumer
+        accessMode: ReadWriteOnce
     injector:
       enabled: false
     YAML
   ]
 }
 
+# ── StorageClass WaitForFirstConsumer cho Vault ──
+resource "terraform_data" "vault_storageclass" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      kubectl apply -f - <<'EOF'
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: techshop-ssm-waitforfirstconsumer
+      provisioner: ebs.csi.aws.com
+      volumeBindingMode: WaitForFirstConsumer
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true
+      parameters:
+        type: gp3
+        encrypted: "true"
+      EOF
+    EOT
+  }
+}
+
 # ── Vault init (chạy 1 lần sau khi Vault pod ready) ──
 resource "terraform_data" "vault_init" {
-  depends_on = [helm_release.vault]
+  depends_on = [helm_release.vault, terraform_data.vault_storageclass]
 
   provisioner "local-exec" {
     command = "${path.module}/vault-init.sh ${var.region}"
