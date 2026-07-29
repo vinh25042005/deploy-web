@@ -108,7 +108,7 @@
 
     - name: Apply ArgoCD root app (app-of-apps)
       shell: |
-        kubectl apply -f https://raw.githubusercontent.com/vinh25042005/deploy-web/capstone-week5/argocd/root.yaml
+        kubectl apply -f https://raw.githubusercontent.com/vinh25042005/deploy-web/week-6-argo-rollouts/argocd/root.yaml
       changed_when: false
 
     - name: Add repository credential to ArgoCD
