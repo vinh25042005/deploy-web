@@ -1,6 +1,6 @@
-{{- if and .Values.backend.enabled (not .Values.backend.rollout.enabled) }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if .Values.backend.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: backend
   namespace: {{ .Values.namespace }}
@@ -10,6 +10,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   replicas: {{ .Values.backend.replicas }}
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: backend
@@ -63,11 +64,39 @@ spec:
           labelSelector:
             matchLabels:
               app: backend
+  strategy:
+    canary:
+      maxSurge: "25%"
+      maxUnavailable: 0
+      steps:
+        - setWeight: 20
+        - pause: { duration: 30 }
+        - setWeight: 50
+        - pause: { duration: 30 }
+        - setWeight: 80
+        - pause: { duration: 30 }
+      trafficRouting:
+        smi: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: backend
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  ports:
+    - port: {{ .Values.backend.port }}
+      targetPort: {{ .Values.backend.port }}
+  selector:
+    app: backend
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-canary
   namespace: {{ .Values.namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"

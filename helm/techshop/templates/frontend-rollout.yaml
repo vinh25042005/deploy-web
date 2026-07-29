@@ -1,6 +1,6 @@
-{{- if and .Values.frontend.enabled (not .Values.frontend.rollout.enabled) }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if .Values.frontend.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: frontend
   namespace: {{ .Values.namespace }}
@@ -10,6 +10,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: {{ .Values.frontend.replicas }}
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: frontend
@@ -37,11 +38,36 @@ spec:
           labelSelector:
             matchLabels:
               app: frontend
+  strategy:
+    blueGreen:
+      activeService: frontend-active
+      previewService: frontend-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 60
+      steps:
+        - setColor: green
+        - pause: { duration: 30 }
+        - setColor: blue
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend
+  name: frontend-active
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ports:
+    - port: {{ .Values.frontend.port }}
+      targetPort: {{ .Values.frontend.port }}
+  selector:
+    app: frontend
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-preview
   namespace: {{ .Values.namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "2"

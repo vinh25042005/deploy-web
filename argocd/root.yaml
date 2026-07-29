@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/vinh25042005/deploy-web.git
-    targetRevision: capstone-week5
+    targetRevision: week-6-argo-rollouts
     path: argocd/apps
   destination:
     server: https://kubernetes.default.svc

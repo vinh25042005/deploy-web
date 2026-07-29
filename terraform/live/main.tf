@@ -306,23 +306,12 @@ resource "terraform_data" "vault_init" {
   }
 }
 
-# ── External Secrets Operator (đồng bộ Vault → K8s Secret) ──
-resource "helm_release" "external_secrets" {
-  name       = "external-secrets"
-  namespace  = "external-secrets"
-  repository = "https://charts.external-secrets.io"
-  chart      = "external-secrets"
+# ── Argo Rollouts (progressive delivery) ──
+resource "helm_release" "argo_rollouts" {
+  name       = "argo-rollouts"
+  namespace  = "argo-rollouts"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-rollouts"
 
   create_namespace = true
-
-  depends_on = [terraform_data.vault_init]
-}
-
-# ── Apply ExternalSecret manifests ──
-resource "terraform_data" "apply_manifests" {
-  depends_on = [helm_release.external_secrets]
-
-  provisioner "local-exec" {
-    command = "kubectl apply -f ${path.module}/manifests/"
-  }
 }
