@@ -238,6 +238,8 @@ resource "null_resource" "ansible" {
 
 # ── Vault (HashiCorp) — quản lý secret tập trung ──
 resource "helm_release" "vault" {
+  depends_on = [null_resource.ansible]
+
   name       = "vault"
   namespace  = "vault"
   repository = "https://helm.releases.hashicorp.com"
@@ -313,6 +315,8 @@ resource "terraform_data" "vault_init" {
 
 # ── Argo Rollouts (progressive delivery) ──
 resource "helm_release" "argo_rollouts" {
+  depends_on = [null_resource.ansible]
+
   name       = "argo-rollouts"
   namespace  = "argo-rollouts"
   repository = "https://argoproj.github.io/argo-helm"
