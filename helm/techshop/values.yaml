@@ -26,10 +26,11 @@ postgres:
   replicas: 1
   port: 5432
   user: postgres
-  # password: được lấy từ K8s Secret (postgres-credentials) do External Secrets đồng bộ từ Vault
+  # password: Vault Agent Injector tự động inject qua sidecar (xem templates/postgres.yaml)
   database: shopdb
   existingSecret: postgres-credentials
   existingSecretKey: password
+  # ↑ backup CronJob vẫn dùng secretRef này (Vault Agent không hỗ trợ CronJob)
   storage:
     size: 10Gi
     className: techshop-ssd-immediate

@@ -271,7 +271,7 @@ resource "helm_release" "vault" {
         storageClass: techshop-ssm-waitforfirstconsumer
         accessMode: ReadWriteOnce
     injector:
-      enabled: false
+      enabled: true
     YAML
   ]
 }
