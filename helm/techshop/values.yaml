@@ -26,8 +26,10 @@ postgres:
   replicas: 1
   port: 5432
   user: postgres
-  password: password123
+  # password: được lấy từ K8s Secret (postgres-credentials) do External Secrets đồng bộ từ Vault
   database: shopdb
+  existingSecret: postgres-credentials
+  existingSecretKey: password
   storage:
     size: 10Gi
     className: techshop-ssd-immediate
@@ -42,8 +44,8 @@ config:
   jwtExpiresIn: 7d
   frontendUrl: http://techshop.local
   backendInternalUrl: http://backend:3001
-  jwtSecret: changeme
-  databaseUrl: postgresql://postgres:password123@postgres:5432/shopdb?schema=public
+  # jwtSecret: lấy từ K8s Secret (jwt-secret) do External Secrets đồng bộ từ Vault
+  # databaseUrl: lấy từ K8s Secret (database-url) do External Secrets đồng bộ từ Vault
 
 ingress:
   host: techshop.local
@@ -113,7 +115,10 @@ monitoring:
 
     # ─── Grafana ───
     grafana:
-      adminPassword: admin123
+      adminPassword: ""
+      admin:
+        existingSecret: grafana-admin
+        existingSecretKey: admin_password
       service:
         type: ClusterIP
         port: 80

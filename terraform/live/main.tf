@@ -5,6 +5,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.0"
+    }
   }
   backend "s3" {
     bucket         = "techshop-tfstate"
@@ -225,5 +233,67 @@ resource "null_resource" "ansible" {
       echo ">>> Ansible failed after 3 attempts"
       exit 1
     EOT
+  }
+}
+
+# ── Vault (HashiCorp) — quản lý secret tập trung ──
+resource "helm_release" "vault" {
+  name       = "vault"
+  namespace  = "vault"
+  repository = "https://helm.releases.hashicorp.com"
+  chart      = "vault"
+
+  create_namespace = true
+
+  # Standalone mode — 1 pod, đủ dùng cho project
+  values = [
+    <<-YAML
+    server:
+      dev:
+        enabled: false
+      ha:
+        enabled: false
+      standalone:
+        enabled: true
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "200m"
+    injector:
+      enabled: false
+    YAML
+  ]
+}
+
+# ── Vault init (chạy 1 lần sau khi Vault pod ready) ──
+resource "terraform_data" "vault_init" {
+  depends_on = [helm_release.vault]
+
+  provisioner "local-exec" {
+    command = "${path.module}/vault-init.sh ${var.region}"
+  }
+}
+
+# ── External Secrets Operator (đồng bộ Vault → K8s Secret) ──
+resource "helm_release" "external_secrets" {
+  name       = "external-secrets"
+  namespace  = "external-secrets"
+  repository = "https://charts.external-secrets.io"
+  chart      = "external-secrets"
+
+  create_namespace = true
+
+  depends_on = [terraform_data.vault_init]
+}
+
+# ── Apply ExternalSecret manifests ──
+resource "terraform_data" "apply_manifests" {
+  depends_on = [helm_release.external_secrets]
+
+  provisioner "local-exec" {
+    command = "kubectl apply -f ${path.module}/manifests/"
   }
 }

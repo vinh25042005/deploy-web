@@ -27,7 +27,10 @@ spec:
             - name: PGUSER
               value: {{ .Values.postgres.user | quote }}
             - name: PGPASSWORD
-              value: {{ .Values.postgres.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingSecret }}
+                  key: {{ .Values.postgres.existingSecretKey }}
             - name: PGDATABASE
               value: {{ .Values.postgres.database | quote }}
             - name: S3_BUCKET
