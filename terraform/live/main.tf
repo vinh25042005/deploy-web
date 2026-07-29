@@ -379,3 +379,23 @@ resource "terraform_data" "apply_manifests" {
     command = "kubectl apply -f ${path.module}/manifests/"
   }
 }
+
+# ── Update ArgoCD app branch ──
+resource "terraform_data" "update_argocd_branch" {
+  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      for app in techshop-root techshop-dev; do
+        CURRENT=$(kubectl get application $app -n argocd -o jsonpath='{.spec.source.targetRevision}' 2>/dev/null || echo "")
+        if [ "$CURRENT" != "week-6-argo-rollouts" ]; then
+          kubectl patch application $app -n argocd --type merge \
+            -p '{"spec":{"source":{"targetRevision":"week-6-argo-rollouts"}}}' 2>/dev/null || true
+          echo "Updated $app to week-6-argo-rollouts"
+        else
+          echo "$app already on week-6-argo-rollouts"
+        fi
+      done
+    EOT
+  }
+}
