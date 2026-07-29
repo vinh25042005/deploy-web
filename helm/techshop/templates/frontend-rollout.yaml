@@ -58,10 +58,6 @@ spec:
       previewService: frontend-preview
       autoPromotionEnabled: false
       scaleDownDelaySeconds: 60
-      steps:
-        - setColor: green
-        - pause: { duration: 30 }
-        - setColor: blue
 ---
 apiVersion: v1
 kind: Service
