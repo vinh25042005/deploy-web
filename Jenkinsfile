@@ -311,13 +311,13 @@ pipeline {
         always {
             script {
                 dir('app-source') {
-                    sh """
+                    sh '''
                         echo '>>> Cleaning old Docker images (keep newest 3)...'
-                        docker images '${REGISTRY_BASE}/deploy-web-backend' --format '{{.CreatedAt}}|{{.ID}}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true
-                        docker images '${REGISTRY_BASE}/deploy-web-frontend' --format '{{.CreatedAt}}|{{.ID}}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true
+                        docker images '''' + REGISTRY_BASE + '''/deploy-web-backend' --format '{{.CreatedAt}}|{{.ID}}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true
+                        docker images '''' + REGISTRY_BASE + '''/deploy-web-frontend' --format '{{.CreatedAt}}|{{.ID}}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true
                         docker system prune -f --filter 'until=24h' 2>/dev/null || true
                         echo '>>> Cleanup done'
-                    """
+                    '''
                 }
                 cleanWs()  // Xóa workspace giải phóng disk
             }
