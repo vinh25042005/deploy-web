@@ -1,6 +1,6 @@
 storage:
   ebsCSI:
-    enabled: true       # StorageClass chỉ tạo 1 lần, dev đã tạo rồi
+    enabled: false       # Dùng chung với dev (cluster-scoped, chỉ cần 1 lần)
 
 namespace: techshop-stg
 
