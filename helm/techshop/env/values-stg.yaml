@@ -5,8 +5,8 @@ storage:
 namespace: techshop-stg
 
 images:
-  backend: docker.io/vinh2504/deploy-web-backend:stg
-  frontend: docker.io/vinh2504/deploy-web-frontend:stg
+  backend: docker.io/vinh2504/deploy-web-backend:dev     # Tạm dùng dev tag vì chưa có Jenkins build cho stg
+  frontend: docker.io/vinh2504/deploy-web-frontend:dev   # Sau khi Jenkins build ENV=stg, Image Updater sẽ tự cập nhật
 
 backend:
   replicas: 2
