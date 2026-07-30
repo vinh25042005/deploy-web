@@ -11,7 +11,7 @@ metadata:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts: [{{ .Values.ingress.host | quote }}]
       secretName: {{ .Values.ingress.tlsSecret }}

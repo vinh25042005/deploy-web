@@ -49,6 +49,7 @@ config:
   # databaseUrl: lấy từ K8s Secret (database-url) do External Secrets đồng bộ từ Vault
 
 ingress:
+  className: nginx
   host: techshop.local
   tlsSecret: techshop-tls
   tls:
