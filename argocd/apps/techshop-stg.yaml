@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: techshop-stg
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vinh25042005/deploy-web.git
+    targetRevision: week-6-argo-rollouts
+    path: helm/techshop
+    helm:
+      valueFiles:
+        - values.yaml
+        - env/values-stg.yaml
+      skipCrds: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: techshop-stg
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -267,27 +267,29 @@ pipeline {
                             def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}" : ''
                             def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
                             sh """
-                                echo 'helm:' > helm/techshop/.argocd-source-techshop-dev.yaml
-                                echo '  parameters:' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                            def argocdFile = "helm/techshop/.argocd-source-techshop-${params.ENV}.yaml"
+                            sh """
+                                echo 'helm:' > ${argocdFile}
+                                echo '  parameters:' >> ${argocdFile}
                             """
                             if (backendTag) {
                                 sh """
-                                    echo '  - name: images.backend' >> helm/techshop/.argocd-source-techshop-dev.yaml
-                                    echo '    value: ${backendTag}' >> helm/techshop/.argocd-source-techshop-dev.yaml
-                                    echo '    forcestring: true' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                    echo '  - name: images.backend' >> ${argocdFile}
+                                    echo '    value: ${backendTag}' >> ${argocdFile}
+                                    echo '    forcestring: true' >> ${argocdFile}
                                 """
                             }
                             if (frontendTag) {
                                 sh """
-                                    echo '  - name: images.frontend' >> helm/techshop/.argocd-source-techshop-dev.yaml
-                                    echo '    value: ${frontendTag}' >> helm/techshop/.argocd-source-techshop-dev.yaml
-                                    echo '    forcestring: true' >> helm/techshop/.argocd-source-techshop-dev.yaml
+                                    echo '  - name: images.frontend' >> ${argocdFile}
+                                    echo '    value: ${frontendTag}' >> ${argocdFile}
+                                    echo '    forcestring: true' >> ${argocdFile}
                                 """
                             }
                             sh """
                                 git config user.email "jenkins@techshop.local"
                                 git config user.name "jenkins-ci"
-                                git add helm/techshop/.argocd-source-techshop-dev.yaml
+                                git add ${argocdFile}
                                 git diff --cached --quiet && echo "No changes to commit" || {
                                     git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
                                     git pull --rebase https://\${GIT_USER}:\${GIT_PASS}@github.com/vinh25042005/deploy-web.git week-6-argo-rollouts 2>/dev/null || true
