@@ -19,6 +19,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: techshop-stg
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/replicas
+        - /status
+        - /spec/volumeClaimTemplates
   syncPolicy:
     automated:
       prune: true

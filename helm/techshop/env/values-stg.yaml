@@ -25,6 +25,13 @@ ingress:
   host: stg.techshop.local
 
 monitoring:
+  enabled: true
+
+  # ─── Dùng chung monitoring stack với dev (cluster-scoped) ───
+  # Không cài lại Prometheus, Grafana, Node Exporter cho stg
+  # Dev đã có đủ và scrape được metric từ mọi namespace
+  kube-prometheus-stack:
+    enabled: false
   loki:
     enabled: false
   promtail:
