@@ -18,31 +18,10 @@ config:
   nodeEnv: staging
 
 ingress-nginx:
-  controller:
-    hostNetwork: true
-    kind: DaemonSet
-    daemonset:
-      useHostPort: true
-    service:
-      type: ClusterIP
-    ingressClassResource:
-      name: nginx-stg
-      controllerValue: k8s.io/ingress-nginx-stg
-      enabled: true
-      default: false
-    ingressClass: nginx-stg
-    nodeSelector:
-      role: ingress
-    tolerations:
-      - key: role
-        operator: Equal
-        value: ingress
-        effect: NoSchedule
-    admissionWebhooks:
-      enabled: false
+  enabled: false          # Dùng chung Ingress Controller với dev
 
 ingress:
-  className: nginx-stg
+  className: nginx        # Dùng chung ingress class với dev
   host: stg.techshop.local
 
 monitoring:
