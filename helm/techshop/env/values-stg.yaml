@@ -1,3 +1,7 @@
+storage:
+  ebsCSI:
+    enabled: false       # StorageClass chỉ tạo 1 lần, dev đã tạo rồi
+
 namespace: techshop-stg
 
 images:

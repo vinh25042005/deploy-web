@@ -1,4 +1,4 @@
-{{- if .Values.postgres.enabled }}
+{{- if and .Values.postgres.enabled .Values.storage.ebsCSI.enabled }}
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
