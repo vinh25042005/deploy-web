@@ -1,0 +1,5 @@
+helm:
+  parameters:
+  - name: images.backend
+    value: docker.io/vinh2504/deploy-web-backend:stg-28
+    forcestring: true
