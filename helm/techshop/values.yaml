@@ -1,5 +1,12 @@
 namespace: techshop-dev
 
+# ─── External Secrets (Vault → K8s Secrets) ───
+externalSecrets:
+  enabled: true
+  backendSecrets: true
+  postgresCredentials: true
+  grafanaAdmin: true
+
 images:
   backend: docker.io/vinh2504/deploy-web-backend:latest
   frontend: docker.io/vinh2504/deploy-web-frontend:latest
