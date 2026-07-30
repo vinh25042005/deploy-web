@@ -128,7 +128,7 @@ vault policy write techshop /tmp/techshop-policy.hcl'
 kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   vault write auth/kubernetes/role/techshop \
   bound_service_account_names="*" \
-  bound_service_account_namespaces="techshop-dev" \
+  bound_service_account_namespaces="techshop-dev,techshop-stg" \
   policies=techshop \
   ttl=24h
 
