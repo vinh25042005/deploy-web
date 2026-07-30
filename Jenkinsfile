@@ -266,8 +266,8 @@ pipeline {
                             ).trim()
                             def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}" : ''
                             def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
-                            sh """
                             def argocdFile = "helm/techshop/.argocd-source-techshop-${params.ENV}.yaml"
+
                             sh """
                                 echo 'helm:' > ${argocdFile}
                                 echo '  parameters:' >> ${argocdFile}
@@ -283,20 +283,20 @@ pipeline {
                                 sh """
                                     echo '  - name: images.frontend' >> ${argocdFile}
                                     echo '    value: ${frontendTag}' >> ${argocdFile}
-                                    echo '    forcestring: true' >>  ${argocdFile}
+                                    echo '    forcestring: true' >> ${argocdFile}
                                 """
                             }
-                            sh '''
+                            sh """
                                 git config user.email "jenkins@techshop.local"
                                 git config user.name "jenkins-ci"
-                                git add ''' + argocdFile + '''
+                                git add ${argocdFile}
                                 git diff --cached --quiet && echo "No changes to commit" || {
-                                    git commit -m "deploy ''' + IMAGE_TAG + ''' by ''' + commitAuthor + ''' (build #''' + BUILD_NUMBER + ''') [skip ci]"
-                                    git pull --rebase https://$GIT_USER:$GIT_PASS@github.com/vinh25042005/deploy-web.git week-6-argo-rollouts 2>/dev/null || true
-                                    git push https://$GIT_USER:$GIT_PASS@github.com/vinh25042005/deploy-web.git HEAD:week-6-argo-rollouts
-                                    echo "✅ Pushed tag ''' + IMAGE_TAG + ''' to Git"
+                                    git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
+                                    git pull --rebase https://\$GIT_USER:\$GIT_PASS@github.com/vinh25042005/deploy-web.git week-6-argo-rollouts 2>/dev/null || true
+                                    git push https://\$GIT_USER:\$GIT_PASS@github.com/vinh25042005/deploy-web.git HEAD:week-6-argo-rollouts
+                                    echo "✅ Pushed tag ${IMAGE_TAG} to Git"
                                 }
-                            '''
+                            """
                         }
                     }
                 }
