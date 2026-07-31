@@ -129,9 +129,12 @@ kubectl patch application techshop-stg -n argocd --type merge \
 
 **Lỗi**: `vault read database/creds/techshop-role` → `failed to find entry for connection with name: "techshop-postgres"`.
 
-**Nguyên nhân**: `vault-init.sh` chạy trong terraform apply, nhưng postgres (techshop-dev) do ArgoCD deploy **SAU** apply → Vault không verify được connection → `vault write database/config` fail bị nuốt bởi `2>/dev/null || true`.
+**Nguyên nhân**: `vault-init.sh` chạy trong terraform apply, nhưng postgres (techshop-dev) do ArgoCD deploy **SAU** apply → Vault không verify được connection → `vault write database/config` fail.
 
-**Fix** (`vault-init.sh`): Thêm retry chờ postgres (mặc định 180s) trước khi ghi `database/config`; nếu timeout thì log cảnh báo kèm lệnh chạy lại, không fail apply.
+**Fix (tự động hoá)**:
+- `terraform/live/configure-vault-db.sh` + `terraform_data.configure_vault_db` (trong `main.tf`): resource chạy **cuối apply** (depends_on vault_init + apply_manifests + update_argocd_branch), chờ postgres `Running` (mặc định 600s) rồi ghi `database/config` + `database/roles` + test.
+- `vault-init.sh` [9b]: chỉ thử nhanh 1 lần (không retry 180s vì postgres chưa bao giờ tồn tại lúc apply) — nếu chưa được thì bỏ qua, để `configure_vault_db` xử lý.
+- Nếu postgres không lên sau 600s → resource fail → lần `terraform apply` sau tự retry.
 
 ## Files đã sửa
 
@@ -140,5 +143,7 @@ kubectl patch application techshop-stg -n argocd --type merge \
 | `terraform/live/main.tf` | Thêm `wait = false` cho vault & external_secrets, bỏ nodeSelector, sửa apply_manifests chờ webhook, thêm helm_release.ebs_csi_driver, sửa set syntax, thêm `seal "awskms"` |
 | `terraform/modules/compute/main.tf` | Thêm `ec2:DescribeAvailabilityZones`, `ec2:DescribeSnapshots`, `kms:*` vào IAM policy |
 | `ansible/roles/common/tasks/main.yml` | Thêm task kill unattended-upgrades + xoá apt locks |
-| `terraform/live/vault-init.sh` | KMS auto-unseal (bỏ key-shares/unseal thủ công), retry DB config chờ postgres |
+| `terraform/live/vault-init.sh` | KMS auto-unseal (bỏ key-shares/unseal thủ công), DB config thử nhanh (configure_vault_db lo phần chính) |
+| `terraform/live/configure-vault-db.sh` | Tự động cấu hình dynamic DB secrets sau khi ArgoCD deploy postgres |
+| `terraform/live/main.tf` | Thêm `terraform_data.configure_vault_db` chạy cuối apply |
 | `helm/techshop/values.yaml` | Tắt `storage.ebsCSI` (terraform sở hữu, tránh duplicate + prune) |
