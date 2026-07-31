@@ -1,6 +1,6 @@
 storage:
   ebsCSI:
-    enabled: false       # Dùng chung với dev (cluster-scoped, chỉ cần 1 lần)
+    enabled: false       # Terraform cài cluster-wide trong kube-system — không env nào cần cài riêng
 
 namespace: techshop-stg
 

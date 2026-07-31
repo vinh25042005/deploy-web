@@ -92,9 +92,11 @@ hpa:
   targetCPU: 50
 
 # ─── Storage ───
+# EBS CSI driver được Terraform cài cluster-wide trong kube-system,
+# nên KHÔNG cài qua chart này ở bất kỳ env nào (tránh trùng lặp driver).
 storage:
   ebsCSI:
-    enabled: true
+    enabled: false
 
 # ─── Metrics Server (cho HPA) ───
 metrics-server:
