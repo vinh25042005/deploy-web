@@ -457,9 +457,9 @@ resource "terraform_data" "update_argocd_branch" {
 
 # ── Configure Dynamic Database Secrets (SAU khi ArgoCD deploy postgres) ──
 # vault-init.sh chạy trong apply nhưng postgres do ArgoCD deploy sau apply,
-# nên không kết nối được. Resource này chờ postgres lên rồi ghi DB config.
-# Nếu postgres không lên trong DB_WAIT_SECONDS (mặc định 600s) → fail để
-# lần apply sau tự retry (terraform re-run provisioner của resource failed).
+# nên không kết nối được. Resource này gọi configure-vault-db.sh: chờ postgres
+# lên rồi ghi DB config. Nếu postgres không lên trong DB_WAIT_SECONDS (mặc định
+# 600s) → fail để lần apply sau tự retry (terraform re-run provisioner).
 resource "terraform_data" "configure_vault_db" {
   depends_on = [terraform_data.vault_init, terraform_data.apply_manifests, terraform_data.update_argocd_branch]
 
