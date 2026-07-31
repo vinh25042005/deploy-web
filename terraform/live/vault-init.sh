@@ -44,23 +44,29 @@ if [ "$ALREADY_INIT" == "true" ]; then
   exit 0
 fi
 
-# ── Init Vault (1 key, 1 threshold — đủ cho dev) ──────────────────────────
-echo ">>> [2/9] Initializing Vault..."
-INIT_JSON=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault operator init \
-  -key-shares=1 -key-threshold=1 -format=json)
+# ── Init Vault (KMS auto-unseal — không dùng key-shares/threshold) ───────
+echo ">>> [2/9] Initializing Vault (KMS auto-unseal)..."
+INIT_JSON=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault operator init -format=json)
 
-UNSEAL_KEY=$(echo "$INIT_JSON" | jq -r '.unseal_keys_b64[0]')
+UNSEAL_KEY=$(echo "$INIT_JSON" | jq -r '.unseal_keys_b64[0] // "auto-unseal-kms"')
 ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
 
-echo ">>> [3/9] Storing unseal key + root token in AWS SSM..."
+echo ">>> [3/9] Storing root token + unseal key marker in AWS SSM..."
 aws ssm put-parameter --name "$SSM_PREFIX/vault-unseal-key" \
   --value "$UNSEAL_KEY" --type SecureString --overwrite --region "$REGION"
 
 aws ssm put-parameter --name "$SSM_PREFIX/vault-root-token" \
   --value "$ROOT_TOKEN" --type SecureString --overwrite --region "$REGION"
 
-echo ">>> [4/9] Unsealing Vault..."
-kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault operator unseal "$UNSEAL_KEY"
+# KMS auto-unseal: Vault tự unseal qua AWS KMS, không cần unseal thủ công
+echo ">>> [4/9] Verifying Vault auto-unseal via KMS..."
+SEALED_AFTER_INIT=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status -format=json | jq -r '.sealed // false')
+if [ "$SEALED_AFTER_INIT" == "true" ]; then
+  echo "ERROR: Vault still sealed after KMS auto-unseal! Check IAM/kms_key_id."
+  exit 1
+else
+  echo "  Vault is UNSEALED automatically via KMS ✅"
+fi
 
 # ── Enable secret engine + auth ───────────────────────────────────────────
 echo ">>> [5/9] Enabling KV secret engine..."
