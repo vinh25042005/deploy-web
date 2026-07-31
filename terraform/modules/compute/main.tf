@@ -59,6 +59,11 @@ resource "aws_iam_role_policy" "node_ssm_params" {
           "arn:aws:s3:::${var.backup_bucket_name}",
           "arn:aws:s3:::${var.backup_bucket_name}/*"
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey"]
+        Resource = "arn:aws:kms:${var.region}:*:key/*"
       }
     ]
   })

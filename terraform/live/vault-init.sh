@@ -132,6 +132,26 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   policies=techshop \
   ttl=24h
 
+# ── Dynamic Database Secrets (Postgres) ───────────────────────────────────
+echo ">>> [9b] Enabling Dynamic Database Secrets..."
+kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+  vault secrets enable database 2>/dev/null || true
+
+kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+  vault write database/config/techshop-postgres \
+  plugin_name=postgresql-database-plugin \
+  allowed_roles="techshop-role" \
+  connection_url="postgresql://{{username}}:{{password}}@postgres.techshop-dev.svc.cluster.local:5432/shopdb?sslmode=disable" \
+  username="postgres" \
+  password="$POSTGRES_PASS" 2>/dev/null || true
+
+kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+  vault write database/roles/techshop-role \
+  db_name="techshop-postgres" \
+  creation_statements='CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '"'"'{{password}}'"'"' VALID UNTIL '"'"'{{expiration}}'"'"'; GRANT CONNECT ON DATABASE shopdb TO "{{name}}"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{{name}}";' \
+  default_ttl="1h" \
+  max_ttl="24h" 2>/dev/null || true
+
 echo ""
 echo "============================================"
 echo "✅ Vault initialized and configured!"

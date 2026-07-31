@@ -310,6 +310,24 @@ resource "helm_release" "vault" {
         enabled: false
       standalone:
         enabled: true
+        config: |
+          ui = true
+          disable_mlock = true
+
+          storage "file" {
+            path = "/vault/data"
+          }
+
+          listener "tcp" {
+            address         = "[::]:8200"
+            cluster_address = "[::]:8201"
+            tls_disable     = true
+          }
+
+          seal "awskms" {
+            region     = "ap-southeast-1"
+            kms_key_id = "5f9e342a-d45d-4a93-9841-0398fe67b7da"
+          }
       resources:
         requests:
           memory: "256Mi"
