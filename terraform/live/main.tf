@@ -269,9 +269,28 @@ resource "terraform_data" "wait_k8s_api" {
   }
 }
 
+# ── EBS CSI Driver (cần cho StorageClass của Vault) ──
+resource "helm_release" "ebs_csi_driver" {
+  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api]
+
+  name       = "aws-ebs-csi-driver"
+  namespace  = "kube-system"
+  repository = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
+  chart      = "aws-ebs-csi-driver"
+
+  wait = false
+
+  set = [
+    {
+      name  = "controller.serviceAccount.create"
+      value = "true"
+    }
+  ]
+}
+
 # ── Vault (HashiCorp) — quản lý secret tập trung ──
 resource "helm_release" "vault" {
-  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api]
+  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api, helm_release.ebs_csi_driver]
 
   name       = "vault"
   namespace  = "vault"
@@ -279,6 +298,7 @@ resource "helm_release" "vault" {
   chart      = "vault"
 
   create_namespace = true
+  wait             = false
 
   # Standalone mode — 1 pod, đủ dùng cho project
   values = [
@@ -297,8 +317,6 @@ resource "helm_release" "vault" {
         limits:
           memory: "512Mi"
           cpu: "200m"
-      nodeSelector:
-        topology.kubernetes.io/zone: ap-southeast-1a
       tolerations: []
       dataStorage:
         enabled: true
@@ -318,7 +336,7 @@ resource "helm_release" "vault" {
 
 # ── StorageClass WaitForFirstConsumer cho Vault ──
 resource "terraform_data" "vault_storageclass" {
-  depends_on = [terraform_data.wait_k8s_api]
+  depends_on = [terraform_data.wait_k8s_api, helm_release.ebs_csi_driver]
   provisioner "local-exec" {
     command = <<-EOT
       kubectl apply -f - <<'EOF'
@@ -369,6 +387,7 @@ resource "helm_release" "external_secrets" {
   chart      = "external-secrets"
 
   create_namespace = true
+  wait             = false
 }
 
 # ── Apply ExternalSecret manifests ──
@@ -376,7 +395,25 @@ resource "terraform_data" "apply_manifests" {
   depends_on = [helm_release.external_secrets]
 
   provisioner "local-exec" {
-    command = "kubectl apply -f ${path.module}/manifests/"
+    command = <<-EOT
+      echo ">>> Waiting for external-secrets webhook to be ready..."
+      for i in $(seq 1 30); do
+        if kubectl get pods -n external-secrets -l app.kubernetes.io/name=external-secrets-webhook \
+          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q True; then
+          echo "  Webhook Ready after $${i}0s"
+          break
+        fi
+        if [ $i -eq 30 ]; then
+          echo "ERROR: external-secrets webhook not Ready after 5 minutes!"
+          kubectl describe pods -n external-secrets -l app.kubernetes.io/name=external-secrets-webhook
+          exit 1
+        fi
+        sleep 10
+      done
+      echo ">>> Applying manifests..."
+      kubectl apply -f ${path.module}/manifests/
+      echo ">>> Manifests applied successfully!"
+    EOT
   }
 }
 

@@ -47,7 +47,8 @@ resource "aws_iam_role_policy" "node_ssm_params" {
         Action = [
           "ec2:CreateVolume", "ec2:DeleteVolume", "ec2:DescribeVolumes",
           "ec2:AttachVolume", "ec2:DetachVolume", "ec2:DescribeInstances",
-          "ec2:CreateTags", "ec2:DescribeTags"
+          "ec2:CreateTags", "ec2:DescribeTags",
+          "ec2:DescribeAvailabilityZones", "ec2:DescribeSnapshots"
         ]
         Resource = "*"
       },

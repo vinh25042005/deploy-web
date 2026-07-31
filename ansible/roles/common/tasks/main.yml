@@ -2,6 +2,16 @@
 # Role: common — Cài containerd, kubeadm, kubectl, kubelet trên tất cả node
 # ======================================================================
 
+- name: Kill unattended-upgrades and remove apt locks (avoid race condition on fresh boot)
+  shell: |
+    systemctl stop unattended-upgrades 2>/dev/null || true
+    killall -9 apt-get 2>/dev/null || true
+    killall -9 apt 2>/dev/null || true
+    rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/cache/apt/archives/partial/* 2>/dev/null || true
+    dpkg --configure -a 2>/dev/null || true
+  changed_when: false
+  ignore_errors: true
+
 - name: Replace apt mirror with global archive (avoid 503 from regional mirrors)
   shell: |
     sed -i 's|http://[^.]*\.ec2\.archive\.ubuntu\.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
