@@ -49,7 +49,7 @@ POSTGRES_PASS=$(aws ssm get-parameter --name "$SSM_PREFIX/postgres-password" --w
 
 echo ">>> [db] Chờ Vault unsealed..."
 for i in $(seq 1 30); do
-  SEALED=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status -format=json 2>/dev/null | jq -r '.sealed // "true"' 2>/dev/null || echo "true")
+  SEALED=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status -format=json 2>/dev/null | jq -r '.sealed' 2>/dev/null || echo "true")
   if [ "$SEALED" = "false" ]; then
     echo "  ✅ Vault unsealed"
     break
