@@ -140,48 +140,29 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
 
 # ── Dynamic Database Secrets (Postgres) ───────────────────────────────────
 # Lưu ý: postgres (techshop-dev) do ArgoCD deploy SAU terraform apply, nên
-# bước này có thể chưa kết nối được lần apply đầu. Script sẽ retry tối đa
-# DB_WAIT_SECONDS giây rồi đưa ra cảnh báo kèm lệnh chạy lại (không fail apply).
-echo ">>> [9b] Enabling Dynamic Database Secrets..."
+# bước này chỉ thử NHANH 1 lần. Nếu postgres chưa lên (luôn đúng ở lần apply
+# đầu) → bỏ qua, terraform_data.configure_vault_db sẽ tự cấu hình sau khi
+# ArgoCD sync (chờ postgres Running rồi ghi config + test).
+echo ">>> [9b] Enabling Dynamic Database Secrets (fast attempt)..."
 kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   vault secrets enable database 2>/dev/null || true
 
-DB_WAIT_SECONDS="${DB_WAIT_SECONDS:-180}"
-DB_OK=0
-for i in $(seq 1 $((DB_WAIT_SECONDS / 10))); do
-  if kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
-      vault write database/config/techshop-postgres \
-      plugin_name=postgresql-database-plugin \
-      allowed_roles="techshop-role" \
-      connection_url="postgresql://{{username}}:{{password}}@postgres.techshop-dev.svc.cluster.local:5432/shopdb?sslmode=disable" \
-      username="postgres" \
-      password="$POSTGRES_PASS" >/dev/null 2>&1; then
-    DB_OK=1
-    echo "  ✅ database/config/techshop-postgres configured (retry ${i})"
-    break
-  fi
-  sleep 10
-done
-
-if [ "$DB_OK" = "1" ]; then
+if kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+    vault write database/config/techshop-postgres \
+    plugin_name=postgresql-database-plugin \
+    allowed_roles="techshop-role" \
+    connection_url="postgresql://{{username}}:{{password}}@postgres.techshop-dev.svc.cluster.local:5432/shopdb?sslmode=disable" \
+    username="postgres" \
+    password="$POSTGRES_PASS" >/dev/null 2>&1; then
+  echo "  ✅ database/config/techshop-postgres configured"
   kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
     vault write database/roles/techshop-role \
     db_name="techshop-postgres" \
     creation_statements='CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '"'"'{{password}}'"'"' VALID UNTIL '"'"'{{expiration}}'"'"'; GRANT CONNECT ON DATABASE shopdb TO "{{name}}"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{{name}}";' \
     default_ttl="1h" \
     max_ttl="24h" >/dev/null 2>&1 && echo "  ✅ database/roles/techshop-role configured"
-
-  echo ">>> [9b] Testing dynamic DB credentials..."
-  kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
-    vault read -format=json database/creds/techshop-role 2>/dev/null \
-    | jq -r '.data.username' | sed 's/^/  ✅ dynamic creds OK: /' || echo "  ⚠️ test failed (postgres có thể chưa sẵn sàng)"
 else
-  echo "⚠️  Dynamic DB secrets chưa cấu hình được (postgres chưa lên sau ${DB_WAIT_SECONDS}s)."
-  echo "    Chạy lại sau khi techshop-dev đã sync xong:"
-  echo "      ROOT_TOKEN=\$(aws ssm get-parameter --name /techshop/vault-root-token --with-decryption --region $REGION --query Parameter.Value --output text)"
-  echo "      POSTGRES_PASS=\$(aws ssm get-parameter --name /techshop/postgres-password --with-decryption --region $REGION --query Parameter.Value --output text)"
-  echo "      kubectl exec -n vault vault-0 -- env VAULT_TOKEN=\$ROOT_TOKEN vault write database/config/techshop-postgres plugin_name=postgresql-database-plugin allowed_roles=techshop-role connection_url='postgresql://{{username}}:{{password}}@postgres.techshop-dev.svc.cluster.local:5432/shopdb?sslmode=disable' username=postgres password=\$POSTGRES_PASS"
-  echo "      kubectl exec -n vault vault-0 -- env VAULT_TOKEN=\$ROOT_TOKEN vault write database/roles/techshop-role db_name=techshop-postgres default_ttl=1h max_ttl=24h"
+  echo "  ⏭️  postgres chưa lên (bình thường ở apply đầu) — configure-vault-db.sh sẽ cấu hình sau khi ArgoCD sync."
 fi
 
 echo ""

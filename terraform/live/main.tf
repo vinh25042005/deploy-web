@@ -15,11 +15,11 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "techshop-tfstate"
-    key            = "terraform.tfstate"
-    region         = "ap-southeast-1"
-    encrypt        = true
-    use_lockfile   = true
+    bucket       = "techshop-tfstate"
+    key          = "terraform.tfstate"
+    region       = "ap-southeast-1"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 
@@ -42,15 +42,15 @@ module "network" {
 
 # ── Compute: K8s nodes (private subnet, SSM) ──
 module "compute" {
-  source        = "../modules/compute"
-  project_name  = var.project_name
-  region        = var.region
-  subnet_ids    = [module.network.public_subnet_a_id, module.network.private_subnet_a_id, module.network.private_subnet_b_id]
-  sg_ids        = [module.network.sg_allow_internal_id, module.network.sg_allow_https_id]
-  instance_type = var.instance_type
+  source                = "../modules/compute"
+  project_name          = var.project_name
+  region                = var.region
+  subnet_ids            = [module.network.public_subnet_a_id, module.network.private_subnet_a_id, module.network.private_subnet_b_id]
+  sg_ids                = [module.network.sg_allow_internal_id, module.network.sg_allow_https_id]
+  instance_type         = var.instance_type
   ingress_instance_type = var.ingress_instance_type
-  node_count    = var.node_count
-  key_name      = var.key_name
+  node_count            = var.node_count
+  key_name              = var.key_name
   # ── Ingress nodes (public subnet) ──
   ingress_subnet_ids = [module.network.public_subnet_a_id, module.network.public_subnet_b_id]
   ingress_sg_ids     = [module.network.sg_allow_internal_id, module.network.sg_allow_ingress_id]
@@ -173,7 +173,7 @@ resource "null_resource" "ansible" {
   }
 
   depends_on = [
-    module.compute,       # (bao gồm local_file.ansible_inventory)
+    module.compute, # (bao gồm local_file.ansible_inventory)
     module.rancher,
     module.network,
     aws_lb.ingress,
@@ -452,5 +452,18 @@ resource "terraform_data" "update_argocd_branch" {
         fi
       done
     EOT
+  }
+}
+
+# ── Configure Dynamic Database Secrets (SAU khi ArgoCD deploy postgres) ──
+# vault-init.sh chạy trong apply nhưng postgres do ArgoCD deploy sau apply,
+# nên không kết nối được. Resource này chờ postgres lên rồi ghi DB config.
+# Nếu postgres không lên trong DB_WAIT_SECONDS (mặc định 600s) → fail để
+# lần apply sau tự retry (terraform re-run provisioner của resource failed).
+resource "terraform_data" "configure_vault_db" {
+  depends_on = [terraform_data.vault_init, terraform_data.apply_manifests, terraform_data.update_argocd_branch]
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/configure-vault-db.sh ${var.region}"
   }
 }
