@@ -18,6 +18,9 @@ spec:
         - podSelector:
             matchLabels:
               app: postgres-backup
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
       ports:
         - port: {{ .Values.postgres.port }}
           protocol: TCP
