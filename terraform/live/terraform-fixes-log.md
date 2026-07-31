@@ -55,10 +55,90 @@ Blocks of type "set" are not expected here.
 
 **Fix**: Đổi thành `set = [ { name = "...", value = "..." } ]`.
 
+## 8. Vault KMS auto-unseal — init không được dùng `-key-shares`/`-key-threshold`
+
+**Lỗi**: Sau khi thêm `seal "awskms"` vào Vault config, `vault operator init -key-shares=1 -key-threshold=1` báo:
+```
+* parameters secret_shares,secret_threshold not applicable to seal type awskms
+```
+
+**Fix** (`vault-init.sh`): Bỏ `-key-shares`/`-key-threshold` khi init. Với KMS auto-unseal:
+- Không cần unseal thủ công — Vault tự unseal qua AWS KMS
+- Bỏ bước unseal thủ công, thay bằng verify `sealed=false`
+
+**Kết quả test**: Xóa pod `vault-0` → pod mới tự unseal qua KMS, không cần unseal thủ công ✅
+
+## 9. K8s auth 403 — `token_reviewer_jwt` bị stale sau khi pod Vault restart
+
+**Lỗi**: Pod postgres kẹt ở `Init:0/1` (vault-agent-init), log:
+```
+PUT http://vault.vault.svc:8200/v1/auth/kubernetes/login  Code: 403. Errors: * permission denied
+```
+
+**Nguyên nhân**: `auth/kubernetes/config` được ghi trong apply với `token_reviewer_jwt` của pod Vault lúc đó. Sau khi pod Vault bị xóa (test auto-unseal / node reboot), SA token đổi → JWT cũ bị API server từ chối → TokenReview fail → 403.
+
+**Fix**: Ghi lại `auth/kubernetes/config` với `token_reviewer_jwt` + `kubernetes_ca_cert` hiện tại:
+```
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$ROOT_TOKEN vault write auth/kubernetes/config \
+  token_reviewer_jwt="$(kubectl exec -n vault vault-0 -- cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+  kubernetes_host="https://10.96.0.1:443" \
+  kubernetes_ca_cert="$(kubectl exec -n vault vault-0 -- cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
+```
+
+## 10. ArgoCD prune xoá ClusterRole/CRB dùng chung — EBS CSI mất RBAC
+
+**Lỗi**: Sau khi tắt `storage.ebsCSI` và ArgoCD prune, EBS CSI controller (kube-system) báo:
+```
+User "system:serviceaccount:kube-system:ebs-csi-controller-sa" cannot list persistentvolumeclaims / storageclasses / persistentvolumes / volumeattachments
+```
+→ Không provision được volume → postgres Pending.
+
+**Nguyên nhân**: Helm chart `techshop` có subchart `aws-ebs-csi-driver` (điều kiện `storage.ebsCSI.enabled: true`). Khi ArgoCD deploy bản trùng trong `techshop-dev`, nó tạo ClusterRole/ClusterRoleBinding **cùng tên** với bản terraform cài trong `kube-system`. Khi tắt ebsCSI và ArgoCD prune → xoá luôn ClusterRole/CRB dùng chung → bản kube-system mất quyền.
+
+**Fix**:
+1. Tắt `storage.ebsCSI.enabled: false` trong `helm/techshop/values.yaml` (terraform sở hữu EBS CSI cluster-wide)
+2. Re-install driver: `terraform apply -replace=helm_release.ebs_csi_driver -auto-approve`
+
+## 11. StorageClass bị ArgoCD prune xoá (SC collision helm vs terraform)
+
+**Lỗi**: PVC postgres báo `storageclass "techshop-ssm-waitforfirstconsumer" not found` — StorageClass biến mất.
+
+**Nguyên nhân**: Helm chart `templates/storageclass.yaml` tạo SC **cùng tên** `techshop-ssm-waitforfirstconsumer` với terraform (`vault_storageclass`). Khi ebsCSI bị tắt, ArgoCD prune SC khỏi render → xoá luôn SC của terraform.
+
+**Fix**: Tạo lại SC qua terraform:
+```
+terraform apply -target=terraform_data.vault_storageclass -replace=terraform_data.vault_storageclass -auto-approve
+```
+
+## 12. PVC bị "đóng băng" Immediate mode khi SC không tồn tại lúc tạo
+
+**Lỗi**: Pod postgres báo `0/4 nodes are available: pod has unbound immediate PersistentVolumeClaims`.
+
+**Nguyên nhân**: PVC được tạo khi SC chưa tồn tại → binding mode bị tính là `Immediate` (default) → scheduler từ chối schedule pod dù SC sau đó đã có.
+
+**Fix**: Xoá STS + PVC để tạo lại (SC giờ đã tồn tại → dùng đúng `WaitForFirstConsumer`):
+```
+kubectl delete sts postgres -n techshop-stg
+kubectl delete pvc pgdata-postgres-0 -n techshop-stg
+# ArgoCD (selfHeal) tự tái tạo STS
+kubectl patch application techshop-stg -n argocd --type merge \
+  -p '{"operation":{"sync":{"revision":"<HASH>","prune":true,"syncStrategy":{"apply":{}}}}}'
+```
+
+## 13. Dynamic DB secrets không được cấu hình ở lần apply đầu
+
+**Lỗi**: `vault read database/creds/techshop-role` → `failed to find entry for connection with name: "techshop-postgres"`.
+
+**Nguyên nhân**: `vault-init.sh` chạy trong terraform apply, nhưng postgres (techshop-dev) do ArgoCD deploy **SAU** apply → Vault không verify được connection → `vault write database/config` fail bị nuốt bởi `2>/dev/null || true`.
+
+**Fix** (`vault-init.sh`): Thêm retry chờ postgres (mặc định 180s) trước khi ghi `database/config`; nếu timeout thì log cảnh báo kèm lệnh chạy lại, không fail apply.
+
 ## Files đã sửa
 
 | File | Thay đổi |
 |---|---|
-| `terraform/live/main.tf` | Thêm `wait = false` cho vault & external_secrets, bỏ nodeSelector, sửa apply_manifests chờ webhook, thêm helm_release.ebs_csi_driver, sửa set syntax |
-| `terraform/modules/compute/main.tf` | Thêm `ec2:DescribeAvailabilityZones`, `ec2:DescribeSnapshots` vào IAM policy |
+| `terraform/live/main.tf` | Thêm `wait = false` cho vault & external_secrets, bỏ nodeSelector, sửa apply_manifests chờ webhook, thêm helm_release.ebs_csi_driver, sửa set syntax, thêm `seal "awskms"` |
+| `terraform/modules/compute/main.tf` | Thêm `ec2:DescribeAvailabilityZones`, `ec2:DescribeSnapshots`, `kms:*` vào IAM policy |
 | `ansible/roles/common/tasks/main.yml` | Thêm task kill unattended-upgrades + xoá apt locks |
+| `terraform/live/vault-init.sh` | KMS auto-unseal (bỏ key-shares/unseal thủ công), retry DB config chờ postgres |
+| `helm/techshop/values.yaml` | Tắt `storage.ebsCSI` (terraform sở hữu, tránh duplicate + prune) |
