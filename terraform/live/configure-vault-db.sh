@@ -20,6 +20,31 @@ SSM_PREFIX="/techshop"
 POSTGRES_NS="techshop-stg"   # techshop-dev đã tắt; postgres giờ nằm ở stg
 WAIT_SECONDS="${DB_WAIT_SECONDS:-600}"
 
+# ── Đảm bảo ArgoCD sync ĐÚNG HEAD (phòng repo-server cache stale) ──────────
+#   Bug từng gặp: repo-server giữ branch week-6-argo-rollouts ở commit CŨ →
+#   ArgoCD deploy chart cũ (loki/ebs-csi/alertmanager) → prune xoá EBS CSI RBAC
+#   (kube-system) → postgres không lên. Restart repo-server + force sync về HEAD.
+echo ">>> [db] Restart argocd-repo-server (clear cache)..."
+kubectl rollout restart deployment/argocd-repo-server -n argocd 2>/dev/null || true
+sleep 15
+kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=120s 2>/dev/null || true
+
+echo ">>> [db] Force ArgoCD sync techshop-stg về HEAD (week-6-argo-rollouts)..."
+kubectl patch application techshop-stg -n argocd --type merge \
+  -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"week-6-argo-rollouts","prune":true,"resources":null}}}' 2>/dev/null || true
+
+echo ">>> [db] Chờ ArgoCD sync hoàn tất (tối đa 240s)..."
+for i in $(seq 1 24); do
+  SYNC_REV=$(kubectl get application techshop-stg -n argocd -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || echo "")
+  # HEAD mong đợi: revision của nhánh week-6-argo-rollouts. Nếu sync đúng, tiếp tục.
+  if kubectl get application techshop-stg -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null | grep -q Synced; then
+    echo "  ✅ ArgoCD techshop-stg synced (rev=${SYNC_REV})"
+    break
+  fi
+  sleep 10
+done
+echo "  → ArgoCD đang sync revision: ${SYNC_REV:-<đang cập nhật>}"
+
 echo ">>> [db] Chờ ArgoCD deploy postgres ($POSTGRES_NS)..."
 POSTGRES_READY=0
 for i in $(seq 1 $((WAIT_SECONDS / 10))); do

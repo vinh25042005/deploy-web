@@ -435,13 +435,15 @@ resource "terraform_data" "apply_manifests" {
   }
 }
 
-# ── Update ArgoCD app branch ──
+# ── Update ArgoCD app branch (root + stg + dev) ──
+#   Phòng bug cũ: techshop-stg không được patch → nếu giữ revision cũ sẽ deploy
+#   chart cũ (loki/ebs-csi) → prune xoá EBS CSI RBAC → postgres không lên.
 resource "terraform_data" "update_argocd_branch" {
   depends_on = [null_resource.ansible, terraform_data.wait_k8s_api]
 
   provisioner "local-exec" {
     command = <<-EOT
-      for app in techshop-root techshop-dev; do
+      for app in techshop-root techshop-stg techshop-dev; do
         CURRENT=$(kubectl get application $app -n argocd -o jsonpath='{.spec.source.targetRevision}' 2>/dev/null || echo "")
         if [ "$CURRENT" != "week-6-argo-rollouts" ]; then
           kubectl patch application $app -n argocd --type merge \
