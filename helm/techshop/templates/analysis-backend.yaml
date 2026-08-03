@@ -24,7 +24,9 @@ spec:
         prometheus:
           address: {{ .Values.monitoring.prometheusAddress | default (printf "http://%s-kube-promethe-prometheus:9090" .Release.Name) }}
           query: |
-            sum(rate(nginx_ingress_controller_requests{namespace="{{ .Values.namespace }}", service="backend", status=~"5.."}[2m]))
-            /
-            clamp_min(sum(rate(nginx_ingress_controller_requests{namespace="{{ .Values.namespace }}", service="backend"}[2m])), 1)
+            (
+              sum(rate(nginx_ingress_controller_requests{namespace="{{ .Values.namespace }}", service="backend", status=~"5.."}[2m]))
+              /
+              clamp_min(sum(rate(nginx_ingress_controller_requests{namespace="{{ .Values.namespace }}", service="backend"}[2m])), 1)
+            ) or vector(0)
 {{- end }}

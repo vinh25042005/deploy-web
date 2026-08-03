@@ -85,11 +85,12 @@ ingress-nginx:
     admissionWebhooks:
       enabled: false
     # ─── Metrics cho AnalysisTemplate (Argo Rollouts) ───
-    # Bật /metrics port 10254 + ServiceMonitor → Prometheus scrape được metric HTTP (5xx, latency)
+    # Bật /metrics port 10254 → tạo Service <name>-controller-metrics
+    # ServiceMonitor tạo riêng (servicemonitor-ingress-nginx.yaml) có label release để Prometheus chọn được
     metrics:
       enabled: true
       serviceMonitor:
-        enabled: true
+        enabled: false   # subchart không gắn label release → tắt, dùng template riêng
 
 hpa:
   enabled: true

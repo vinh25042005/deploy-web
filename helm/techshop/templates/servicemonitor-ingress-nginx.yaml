@@ -1,0 +1,27 @@
+{{- if and .Values.monitoring.enabled (index .Values "ingress-nginx" "enabled") }}
+# ─── ServiceMonitor cho ingress-nginx controller ───
+# Prometheus (kube-prometheus-stack) đang chọn ServiceMonitor theo label "release: <release>"
+# phải gắn label release thì mới được scrape
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ingress-nginx-controller
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: {{ .Release.Name }}
+    app.kubernetes.io/name: ingress-nginx
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/component: controller
+{{- end }}
