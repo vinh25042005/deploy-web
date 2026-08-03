@@ -141,7 +141,7 @@ kube-prometheus-stack:
     adminPassword: ""
     admin:
       existingSecret: grafana-admin
-      existingSecretKey: admin_password
+      existingSecretKey: admin-password
     service:
       type: ClusterIP
       port: 80
