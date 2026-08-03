@@ -1,5 +1,8 @@
 helm:
   parameters:
   - name: images.backend
-    value: docker.io/vinh2504/deploy-web-backend:stg-28
+    value: docker.io/vinh2504/deploy-web-backend:stg-31
+    forcestring: true
+  - name: images.frontend
+    value: docker.io/vinh2504/deploy-web-frontend:stg-31
     forcestring: true
