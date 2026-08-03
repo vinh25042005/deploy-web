@@ -85,10 +85,21 @@ spec:
       steps:
         - setWeight: 20
         - pause: { duration: 30 }
+        # Phải PASS analysis (error-rate < 1% && p95 < 0.5s) mới sang bước tiếp.
+        # Fail (error >= 5% hoặc p95 >= 1.5s) 3 lần → auto rollback về stable.
+        - analysis:
+            templates:
+              - templateName: backend-error-rate
         - setWeight: 50
         - pause: { duration: 30 }
+        - analysis:
+            templates:
+              - templateName: backend-error-rate
         - setWeight: 80
         - pause: { duration: 30 }
+        - analysis:
+            templates:
+              - templateName: backend-error-rate
       stableService: backend
       canaryService: backend-canary
 ---

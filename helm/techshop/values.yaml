@@ -84,6 +84,12 @@ ingress-nginx:
         effect: NoSchedule
     admissionWebhooks:
       enabled: false
+    # ─── Metrics cho AnalysisTemplate (Argo Rollouts) ───
+    # Bật /metrics port 10254 + ServiceMonitor → Prometheus scrape được metric HTTP (5xx, latency)
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
 
 hpa:
   enabled: true

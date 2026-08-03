@@ -26,3 +26,4 @@ ingress:
 
 monitoring:
   enabled: true     # dev đã tắt (stack cũ bị prune theo) → stg tự cài kube-prometheus-stack (Prometheus + Grafana)
+  prometheusAddress: http://techshop-stg-kube-promethe-prometheus:9090   # Service Prometheus (Helm rút gọn tên → "kube-promethe")
