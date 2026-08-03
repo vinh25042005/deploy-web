@@ -3,9 +3,9 @@
 # Mỗi phút bắn request vào /api qua ingress controller (Host header)
 # → Prometheus có metric nginx_ingress_controller_requests{service="backend"}
 # → analysis có số liệu thật (không "pass trống" vì thiếu traffic).
-# 30 request/phút (1 mỗi 2s, liên tục) → mỗi cửa sổ 15s của analysis có ~7 request → đo tin cậy.
-# Cần rate limit backend ≥ 1000 req/15min (đã nâng max trong backend/src/index.ts):
-#   30 × 15 = 450 < 1000 ✅ (không bị 429)
+# 2 request/giây = 120 request/phút (sleep 0.5) → mỗi cửa sổ 15s của analysis có ~30 request → đo chuẩn.
+# Cần rate limit backend ≥ 2000 req/15min (đã nâng max trong backend/src/index.ts):
+#   120 × 15 = 1800 < 2000 ✅ (không bị 429)
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -33,10 +33,10 @@ spec:
                   CONTROLLER="https://{{ .Release.Name }}-ingress-nginx-controller"
                   HOST="{{ .Values.ingress.host }}"
                   echo "== traffic generator: $HOST/api/health =="
-                  for i in $(seq 1 30); do
+                  for i in $(seq 1 120); do
                     code=$(curl -sk --max-time 5 -o /dev/null -w "%{http_code}" -H "Host: $HOST" "$CONTROLLER/api/health" || echo "000")
                     echo "req $i -> $code"
-                    sleep 2
+                    sleep 0.5
                   done
                   echo "traffic-done"
 {{- end }}
