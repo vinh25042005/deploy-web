@@ -3,7 +3,7 @@
 # configure-vault-db.sh — Cấu hình Dynamic Database Secrets (Postgres)
 #
 # Tại sao cần script riêng?
-#   vault-init.sh chạy TRONG terraform apply, nhưng postgres (techshop-dev)
+#   vault-init.sh chạy TRONG terraform apply, nhưng postgres (techshop-stg)
 #   do ArgoCD deploy SAU apply. Vì vậy vault-init không kết nối được postgres.
 #   Script này được terraform_data.configure_vault_db gọi Ở CUỐI apply:
 #   chờ postgres lên (ArgoCD sync xong) rồi ghi database/config + role.
@@ -17,7 +17,7 @@ REGION="${1:-ap-southeast-1}"
 VAULT_NS="vault"
 VAULT_POD="vault-0"
 SSM_PREFIX="/techshop"
-POSTGRES_NS="techshop-dev"
+POSTGRES_NS="techshop-stg"   # techshop-dev đã tắt; postgres giờ nằm ở stg
 WAIT_SECONDS="${DB_WAIT_SECONDS:-600}"
 
 echo ">>> [db] Chờ ArgoCD deploy postgres ($POSTGRES_NS)..."
@@ -36,7 +36,7 @@ if [ "$POSTGRES_READY" != "1" ]; then
   echo ""
   echo "❌ postgres chưa Running sau ${WAIT_SECONDS}s. Kiểm tra ArgoCD apps:"
   echo "    kubectl get applications -n argocd"
-  echo "    kubectl get pods -n techshop-dev | grep postgres"
+  echo "    kubectl get pods -n techshop-stg | grep postgres"
   echo ""
   echo "   Khi postgres lên, chạy lại apply để retry:"
   echo "    terraform apply -replace=terraform_data.configure_vault_db -auto-approve"
@@ -66,7 +66,7 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   vault write database/config/techshop-postgres \
   plugin_name=postgresql-database-plugin \
   allowed_roles="techshop-role" \
-  connection_url="postgresql://{{username}}:{{password}}@postgres.techshop-dev.svc.cluster.local:5432/shopdb?sslmode=disable" \
+  connection_url="postgresql://{{username}}:{{password}}@postgres.techshop-stg.svc.cluster.local:5432/shopdb?sslmode=disable" \
   username="postgres" \
   password="$POSTGRES_PASS"
 

@@ -110,7 +110,7 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   vault kv put secret/jwt secret="$JWT_SECRET"
 
 kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
-  vault kv put secret/grafana admin_password="$GRAFANA_PASS"
+  vault kv put secret/grafana admin_password="$GRAFANA_PASS" admin_username="admin"
 
 kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   vault kv put secret/database url="postgresql://postgres:${POSTGRES_PASS}@postgres:5432/shopdb?schema=public"

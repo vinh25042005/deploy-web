@@ -295,9 +295,11 @@ pipeline {
                             def argocdFile = "helm/techshop/.argocd-source-techshop-${ACTIVE_ENV}.yaml"
 
                             // ── Merge .argocd-source: chỉ cập nhật image được build, GIỮ NGUYÊN phần còn lại ──
-                            def argocdPath = "${env.WORKSPACE}/deploy-web/${argocdFile}"
-                            def imgFile = new File(argocdPath)
-                            def imgLines = imgFile.exists() ? imgFile.readLines() : []
+                            // (không dùng new File() — bị Groovy sandbox chặn; dùng readFile/fileExists thay thế)
+                            def imgLines = []
+                            if (fileExists(argocdFile)) {
+                                imgLines = readFile(argocdFile).readLines()
+                            }
                             def keysToUpdate = []
                             if (backendTag) keysToUpdate << 'images.backend'
                             if (frontendTag) keysToUpdate << 'images.frontend'
@@ -320,7 +322,7 @@ pipeline {
                             }
                             if (backendTag) merged += ["  - name: images.backend", "    value: ${backendTag}", "    forcestring: true"]
                             if (frontendTag) merged += ["  - name: images.frontend", "    value: ${frontendTag}", "    forcestring: true"]
-                            imgFile.text = merged.join('\n') + '\n'
+                            writeFile file: argocdFile, text: merged.join('\n') + '\n'
                             sh """
                                 git config user.email "jenkins@techshop.local"
                                 git config user.name "jenkins-ci"
