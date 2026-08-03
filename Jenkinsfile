@@ -11,6 +11,7 @@ pipeline {
         booleanParam(name: 'SKIP_BUILD', defaultValue: false, description: 'Skip Docker build?')
         booleanParam(name: 'SKIP_BACKEND', defaultValue: false, description: 'Skip backend (chỉ build frontend)')
         booleanParam(name: 'SKIP_FRONTEND', defaultValue: false, description: 'Skip frontend (chỉ build backend)')
+        booleanParam(name: 'BUILD_FULL', defaultValue: false, description: 'Build full — bỏ qua detect thay đổi, build cả backend + frontend')
     }
 
     environment {
@@ -52,7 +53,11 @@ pipeline {
                             script: 'git diff --name-only HEAD~1 2>/dev/null || echo "first-build"',
                             returnStdout: true
                         ).trim()
-                        if (changed == 'first-build') {
+                        if (params.BUILD_FULL) {
+                            env.BUILD_BACKEND = 'true'
+                            env.BUILD_FRONTEND = 'true'
+                            echo "BUILD_FULL=true → build cả backend + frontend (bỏ qua detect thay đổi)"
+                        } else if (changed == 'first-build') {
                             env.BUILD_BACKEND = 'true'
                             env.BUILD_FRONTEND = 'true'
                             echo "First build → build all"
