@@ -45,6 +45,26 @@ pipeline {
             }
         }
 
+        // ── Guard chống vòng lặp CI ──────────────────────────────────────────
+        // Jenkins tự commit file .argocd-source-<env>.yaml kèm message "[skip ci]".
+        // Trigger githubPush() KHÔNG tự bỏ qua commit "[skip ci]" → nếu không chặn
+        // ở đây, mỗi auto-commit lại kích hoạt build mới → loop vô hạn.
+        stage('Skip [skip ci]') {
+            steps {
+                script {
+                    dir('deploy-web') {
+                        def commitMsg = sh(script: 'git log -1 --format=%s', returnStdout: true).trim()
+                        echo "Trigger commit: ${commitMsg}"
+                        if (commitMsg.contains('[skip ci]')) {
+                            echo "⏭️  Auto-commit từ Jenkins ([skip ci]) — hủy build để tránh vòng lặp CI"
+                            currentBuild.result = 'SUCCESS'
+                            error('Skipped: [skip ci] commit')
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Check changes') {
             steps {
                 dir('app-source') {
