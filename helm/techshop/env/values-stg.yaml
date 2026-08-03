@@ -25,4 +25,4 @@ ingress:
   host: stg.techshop.local
 
 monitoring:
-  enabled: false    # Dùng chung monitoring stack với dev (cluster-scoped), không cần cài lại
+  enabled: true     # dev đã tắt (stack cũ bị prune theo) → stg tự cài kube-prometheus-stack (Prometheus + Grafana)
