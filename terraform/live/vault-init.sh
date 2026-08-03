@@ -25,8 +25,27 @@ for i in $(seq 1 30); do
   sleep 10
 done
 
+# ── Chờ Vault API reachable (pod Running ≠ server đã listen 8200) ────────
+# Vault có thể mất vài chục giây để boot (gọi KMS lúc khởi động). Nếu cứ
+# chạy vault status/init ngay sẽ dính "connection refused".
+echo ">>> [1b] Waiting for Vault API to be reachable (port 8200)..."
+INIT_STATUS=""
+for i in $(seq 1 18); do
+  INIT_STATUS=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status -format=json 2>/dev/null || echo "")
+  if [ -n "$INIT_STATUS" ]; then
+    echo "  Vault API reachable (attempt $i)"
+    break
+  fi
+  if [ $i -eq 18 ]; then
+    echo "ERROR: Vault API không reachable sau 3 phút!"
+    kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status 2>&1 | tail -5 || true
+    kubectl logs -n "$VAULT_NS" "$VAULT_POD" --tail=15 2>/dev/null || true
+    exit 1
+  fi
+  sleep 10
+done
+
 # ── Check if already initialized ──────────────────────────────────────────
-INIT_STATUS=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- vault status -format=json 2>/dev/null || echo '{"initialized":false}')
 ALREADY_INIT=$(echo "$INIT_STATUS" | jq -r '.initialized // false')
 
 if [ "$ALREADY_INIT" == "true" ]; then
