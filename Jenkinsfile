@@ -6,7 +6,7 @@ pipeline {
     }
 
     parameters {
-        choice(name: 'ENV', choices: ['dev', 'stg', 'prd'], description: 'Target environment')
+        choice(name: 'ENV', choices: ['stg', 'dev', 'prd'], description: 'Target environment')
         string(name: 'APP_REPO_BRANCH', defaultValue: 'techshop-app', description: 'Branch of techshop-app')
         booleanParam(name: 'SKIP_BUILD', defaultValue: false, description: 'Skip Docker build?')
         booleanParam(name: 'SKIP_BACKEND', defaultValue: false, description: 'Skip backend (chỉ build frontend)')
