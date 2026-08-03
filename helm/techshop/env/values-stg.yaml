@@ -18,7 +18,7 @@ config:
   nodeEnv: staging
 
 ingress-nginx:
-  enabled: false          # Dùng chung Ingress Controller với dev
+  enabled: true           # dev đã tắt (không còn controller dùng chung) → stg tự deploy ingress-nginx
 
 ingress:
   className: nginx        # Dùng chung ingress class với dev
