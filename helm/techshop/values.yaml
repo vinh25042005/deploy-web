@@ -119,6 +119,11 @@ monitoring:
       enabled: false
     alertmanager:
       enabled: false
+    # Tắt admission webhook của prometheus-operator — tránh PreSync hooks bị kẹt
+    # ("waiting for deletion of hook kube-promethe-admission") làm ArgoCD sync fail
+    prometheusOperator:
+      admissionWebhooks:
+        enabled: false
 
     # ─── Prometheus ───
     prometheus:
