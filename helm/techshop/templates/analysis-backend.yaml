@@ -17,8 +17,10 @@ spec:
     - name: error-rate
       interval: 15s
       count: 4                 # đo 4 lần (4 × 15s = 60s) — bắt buộc, nếu thiếu sẽ chạy vô hạn
-      successCondition: result < 0.01
-      failureCondition: result >= 0.05
+      # Query trả vector → Argo Rollouts đưa []float64 vào condition → phải dùng result[0]
+      # (nếu viết "result < 0.01" sẽ lỗi "mismatched types []float64 and float64")
+      successCondition: result[0] < 0.01
+      failureCondition: result[0] >= 0.05
       failureLimit: 3
       provider:
         prometheus:
