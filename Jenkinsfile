@@ -17,13 +17,34 @@ pipeline {
     environment {
         REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-        IMAGE_TAG = "${params.ENV}-${BUILD_NUMBER}"
 
+        // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
-        APP_BRANCH = "${params.APP_REPO_BRANCH}"
     }
 
     stages {
+        // ── Resolve ENV theo branch (auto-trigger) hoặc param (manual) ──────
+        //   Auto (webhook push): main/release/staging → stg, branch khác → dev
+        //   Manual (Build with Parameters): dùng ENV đã chọn
+        stage('Resolve ENV') {
+            steps {
+                script {
+                    if (env.GITHUB_BRANCH) {
+                        def branch = env.GITHUB_BRANCH
+                        echo "Auto-trigger từ branch: ${branch}"
+                        env.ACTIVE_ENV = (branch == 'main' || branch == 'release' || branch == 'staging') ? 'stg' : 'dev'
+                        env.APP_BRANCH = branch
+                    } else {
+                        env.ACTIVE_ENV = params.ENV
+                        env.APP_BRANCH = params.APP_REPO_BRANCH
+                        echo "Manual build: ENV=${env.ACTIVE_ENV}, branch=${env.APP_BRANCH}"
+                    }
+                    env.IMAGE_TAG = "${env.ACTIVE_ENV}-${BUILD_NUMBER}"
+                    echo "→ ACTIVE_ENV=${env.ACTIVE_ENV} | IMAGE_TAG=${env.IMAGE_TAG}"
+                }
+            }
+        }
+
         stage('Init') {
             parallel {
                 stage('Clone App Source') {
@@ -159,10 +180,10 @@ pipeline {
                             echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                             docker build -f backend/Dockerfile \\
                                 -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-backend:${params.ENV} \
+                                -t ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV} \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-backend:${params.ENV}
+                            docker push ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV}
                         """
                     }
                 }
@@ -214,10 +235,10 @@ pipeline {
                             docker build -f frontend/Dockerfile \\
                                 --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
                                 -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV} \
+                                -t ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV} \
                                 .
                             docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${params.ENV}
+                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV}
                         """
                     }
                 }
@@ -271,7 +292,7 @@ pipeline {
                             ).trim()
                             def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}" : ''
                             def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
-                            def argocdFile = "helm/techshop/.argocd-source-techshop-${params.ENV}.yaml"
+                            def argocdFile = "helm/techshop/.argocd-source-techshop-${ACTIVE_ENV}.yaml"
 
                             sh """
                                 echo 'helm:' > ${argocdFile}
@@ -311,7 +332,7 @@ pipeline {
     }
 
     post {
-        success { echo "✅ CI thành công! ArgoCD sẽ deploy ${params.ENV} @ ${IMAGE_TAG}" }
+        success { echo "✅ CI thành công! ArgoCD sẽ deploy ${ACTIVE_ENV} @ ${IMAGE_TAG}" }
         failure { echo "❌ CI thất bại!" }
         always {
             script {
