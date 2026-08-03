@@ -16,6 +16,7 @@ spec:
     # Không traffic → ratio = 0 → success (an toàn, không kẹt rollout).
     - name: error-rate
       interval: 15s
+      count: 4                 # đo 4 lần (4 × 15s = 60s) — bắt buộc, nếu thiếu sẽ chạy vô hạn
       successCondition: result < 0.01
       failureCondition: result >= 0.05
       failureLimit: 3
