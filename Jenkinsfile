@@ -294,24 +294,33 @@ pipeline {
                             def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
                             def argocdFile = "helm/techshop/.argocd-source-techshop-${ACTIVE_ENV}.yaml"
 
-                            sh """
-                                echo 'helm:' > ${argocdFile}
-                                echo '  parameters:' >> ${argocdFile}
-                            """
-                            if (backendTag) {
-                                sh """
-                                    echo '  - name: images.backend' >> ${argocdFile}
-                                    echo '    value: ${backendTag}' >> ${argocdFile}
-                                    echo '    forcestring: true' >> ${argocdFile}
-                                """
+                            // ── Merge .argocd-source: chỉ cập nhật image được build, GIỮ NGUYÊN phần còn lại ──
+                            def argocdPath = "${env.WORKSPACE}/deploy-web/${argocdFile}"
+                            def imgFile = new File(argocdPath)
+                            def imgLines = imgFile.exists() ? imgFile.readLines() : []
+                            def keysToUpdate = []
+                            if (backendTag) keysToUpdate << 'images.backend'
+                            if (frontendTag) keysToUpdate << 'images.frontend'
+
+                            def merged = []
+                            def drop = 0
+                            imgLines.each { line ->
+                                if (drop > 0) { drop--; return }   // skip 2 dòng 'value' + 'forcestring' của block cũ
+                                def nameMatch = (line =~ /^\s*- name:\s+(\S+)/)
+                                if (nameMatch.find()) {
+                                    if (nameMatch.group(1) in keysToUpdate) {
+                                        drop = 2
+                                        return
+                                    }
+                                }
+                                merged << line
                             }
-                            if (frontendTag) {
-                                sh """
-                                    echo '  - name: images.frontend' >> ${argocdFile}
-                                    echo '    value: ${frontendTag}' >> ${argocdFile}
-                                    echo '    forcestring: true' >> ${argocdFile}
-                                """
+                            if (merged.isEmpty()) {
+                                merged = ['helm:', '  parameters:']
                             }
+                            if (backendTag) merged += ["  - name: images.backend", "    value: ${backendTag}", "    forcestring: true"]
+                            if (frontendTag) merged += ["  - name: images.frontend", "    value: ${frontendTag}", "    forcestring: true"]
+                            imgFile.text = merged.join('\n') + '\n'
                             sh """
                                 git config user.email "jenkins@techshop.local"
                                 git config user.name "jenkins-ci"
