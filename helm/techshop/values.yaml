@@ -110,59 +110,62 @@ metrics-server:
   args:
     - --kubelet-insecure-tls
 
+# ─── kube-prometheus-stack (Prometheus + Grafana + Alertmanager) ───
+# LƯU Ý: values của subchart phải nằm dưới ĐÚNG key "kube-prometheus-stack" (tên dependency).
+# Trước đây để lồng trong "monitoring.kube-prometheus-stack" → Helm BỎ QUA → stack chạy mặc định
+# (alertmanager bật, admission webhook bật → PreSync hooks kẹt ArgoCD sync).
+kube-prometheus-stack:
+  crds:
+    enabled: false
+  alertmanager:
+    enabled: false
+  # Tắt admission webhook của prometheus-operator — tránh PreSync hooks bị kẹt
+  # ("waiting for deletion of hook kube-promethe-admission") làm ArgoCD sync fail
+  prometheusOperator:
+    admissionWebhooks:
+      enabled: false
+
+  # ─── Prometheus ───
+  prometheus:
+    prometheusSpec:
+      retention: 7d
+      retentionSize: 5GB
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits:   { cpu: 500m, memory: 1Gi }
+      # Cho phép chọn ServiceMonitor từ mọi namespace
+      serviceMonitorSelectorNilUsesHelmValues: false
+
+  # ─── Grafana ───
+  grafana:
+    adminPassword: ""
+    admin:
+      existingSecret: grafana-admin
+      existingSecretKey: admin_password
+    service:
+      type: ClusterIP
+      port: 80
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+    dashboards:
+      default:
+        node-exporter-full:
+          gnetId: 1860
+          datasource: Prometheus
+
+  # ─── Node Exporter ───
+  prometheus-node-exporter:
+    enabled: true
+
+  # ─── kube-state-metrics ───
+  kube-state-metrics:
+    enabled: true
+
 monitoring:
   enabled: true
-
-  # ─── kube-prometheus-stack (Prometheus + Grafana + Alertmanager) ───
-  kube-prometheus-stack:
-    crds:
-      enabled: false
-    alertmanager:
-      enabled: false
-    # Tắt admission webhook của prometheus-operator — tránh PreSync hooks bị kẹt
-    # ("waiting for deletion of hook kube-promethe-admission") làm ArgoCD sync fail
-    prometheusOperator:
-      admissionWebhooks:
-        enabled: false
-
-    # ─── Prometheus ───
-    prometheus:
-      prometheusSpec:
-        retention: 7d
-        retentionSize: 5GB
-        resources:
-          requests: { cpu: 200m, memory: 512Mi }
-          limits:   { cpu: 500m, memory: 1Gi }
-        # Cho phép chọn ServiceMonitor từ mọi namespace
-        serviceMonitorSelectorNilUsesHelmValues: false
-
-    # ─── Grafana ───
-    grafana:
-      adminPassword: ""
-      admin:
-        existingSecret: grafana-admin
-        existingSecretKey: admin_password
-      service:
-        type: ClusterIP
-        port: 80
-      sidecar:
-        dashboards:
-          enabled: true
-          label: grafana_dashboard
-          labelValue: "1"
-      dashboards:
-        default:
-          node-exporter-full:
-            gnetId: 1860
-            datasource: Prometheus
-
-    # ─── Node Exporter ───
-    prometheus-node-exporter:
-      enabled: true
-
-    # ─── kube-state-metrics ───
-    kube-state-metrics:
-      enabled: true
 
   # ─── Loki (log aggregation) — tắt vì OOM trên t3.medium ───
   loki:
