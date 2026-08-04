@@ -301,27 +301,26 @@ pipeline {
                         writeFile file: 'slsa-provenance.json', text: groovy.json.JsonOutput.toJson(prov)
                     }
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                        // ── Chuẩn hóa PEM bằng Groovy (tránh shell heredoc bị indent → syntax error) ──
+                        //   Jenkins Secret text có thể dồn key thành 1 dòng hoặc giữ '\n' literal
+                        //   → cosign báo "invalid pem block". Groovy tự rebuild PEM đúng chuẩn.
+                        script {
+                            def rawKey = COSIGN_PRIVATE_KEY.replace('\\n', '\n')  // literal \n → newline
+                            def matcher = (rawKey =~ /-----BEGIN ([^-]+)-----(.*?)-----END ([^-]+)-----/)
+                            if (!matcher.find()) {
+                                error "ERROR: cannot find PEM block in cosign key"
+                            }
+                            def header = "-----BEGIN ${matcher.group(1)}-----"
+                            def footer = "-----END ${matcher.group(3)}-----"
+                            def body = matcher.group(2).replaceAll(/\s+/, '')   // strip mọi whitespace trong body
+                            def wrapped = body.replaceAll(/(.{64})/, '$1\n')    // wrap 64 ký tự/dòng
+                            writeFile file: 'cosign.key', text: "${header}\n${wrapped}\n${footer}\n"
+                            sh 'chmod 600 cosign.key'
+                        }
                         sh """#!/bin/bash
                             set -e
                             export COSIGN_PASSWORD="\${COSIGN_PASSWORD:-}"
 
-                            # ── Chuẩn hóa PEM: dù key bị dán méo newline vẫn rebuild đúng chuẩn ──
-                            #   (Jenkins Secret text có thể dồn key thành 1 dòng hoặc giữ '\n' literal
-                            #    → cosign báo "invalid pem block". Python dưới đây tự phục hồi.)
-                            python3 - <<'PYEOF' > cosign.key
-                            import re, sys
-                            raw = sys.stdin.read()
-                            raw = raw.replace('\\\\n', '\\n')
-                            m = re.search(r'-----BEGIN ([^-]+)-----(.*?)-----END ([^-]+)-----', raw, re.S)
-                            if not m:
-                                sys.stderr.write('ERROR: cannot find PEM block in cosign key\\n'); sys.exit(1)
-                            header = '-----BEGIN ' + m.group(1) + '-----'
-                            footer = '-----END ' + m.group(3) + '-----'
-                            body = re.sub(r'\\s+', '', m.group(2))
-                            wrapped = '\\n'.join(body[j:j+64] for j in range(0, len(body), 64))
-                            sys.stdout.write(header + '\\n' + wrapped + '\\n' + footer + '\\n')
-                            PYEOF
-                            chmod 600 cosign.key
                             echo ">>> Kiểm tra key format:"
                             head -1 cosign.key
                             wc -l cosign.key
