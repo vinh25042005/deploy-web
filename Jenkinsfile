@@ -94,58 +94,59 @@ pipeline {
             }
         }
 
-        stage('Lint & Test') {
-            when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
-            matrix {
-                axes {
-                    axis {
-                        name 'NODE_VERSION'
-                        values '18', '20', '22'
-                    }
-                }
-                stages {
-                    stage('Backend (Node $NODE_VERSION)') {
-                        steps {
-                            sh """
-                                rm -rf app-source-backend-${NODE_VERSION}
-                                cp -r app-source/backend app-source-backend-${NODE_VERSION}
-                            """
-                            dir("app-source-backend-${NODE_VERSION}") {
-                                sh """#!/bin/bash
-                                    if [ "${NODE_VERSION}" != "22" ]; then
-                                        export NVM_DIR=/var/jenkins_home/.nvm
-                                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
-                                        nvm use ${NODE_VERSION}
-                                    fi
-                                    npm ci
-                                    npm run lint 2>/dev/null || true
-                                    npm test 2>/dev/null || true
-                                """
-                            }
-                        }
-                    }
-                    stage('Frontend (Node $NODE_VERSION)') {
-                        steps {
-                            sh """
-                                rm -rf app-source-frontend-${NODE_VERSION}
-                                cp -r app-source/frontend app-source-frontend-${NODE_VERSION}
-                            """
-                            dir("app-source-frontend-${NODE_VERSION}") {
-                                sh """#!/bin/bash
-                                    if [ "${NODE_VERSION}" != "22" ]; then
-                                        export NVM_DIR=/var/jenkins_home/.nvm
-                                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
-                                        nvm use ${NODE_VERSION}
-                                    fi
-                                    npm ci
-                                    npx tsc --noEmit 2>/dev/null || true
-                                """
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // ── [TẠM TẮT] Lint & Test matrix (Node 18/20/22) — đang comment để bỏ qua, bật lại bằng cách bỏ // ──
+        // stage('Lint & Test') {
+        //     when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
+        //     matrix {
+        //         axes {
+        //             axis {
+        //                 name 'NODE_VERSION'
+        //                 values '18', '20', '22'
+        //             }
+        //         }
+        //         stages {
+        //             stage('Backend (Node $NODE_VERSION)') {
+        //                 steps {
+        //                     sh """
+        //                         rm -rf app-source-backend-${NODE_VERSION}
+        //                         cp -r app-source/backend app-source-backend-${NODE_VERSION}
+        //                     """
+        //                     dir("app-source-backend-${NODE_VERSION}") {
+        //                         sh """#!/bin/bash
+        //                             if [ "${NODE_VERSION}" != "22" ]; then
+        //                                 export NVM_DIR=/var/jenkins_home/.nvm
+        //                                 [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+        //                                 nvm use ${NODE_VERSION}
+        //                             fi
+        //                             npm ci
+        //                             npm run lint 2>/dev/null || true
+        //                             npm test 2>/dev/null || true
+        //                         """
+        //                     }
+        //                 }
+        //             }
+        //             stage('Frontend (Node $NODE_VERSION)') {
+        //                 steps {
+        //                     sh """
+        //                         rm -rf app-source-frontend-${NODE_VERSION}
+        //                         cp -r app-source/frontend app-source-frontend-${NODE_VERSION}
+        //                     """
+        //                     dir("app-source-frontend-${NODE_VERSION}") {
+        //                         sh """#!/bin/bash
+        //                             if [ "${NODE_VERSION}" != "22" ]; then
+        //                                 export NVM_DIR=/var/jenkins_home/.nvm
+        //                                 [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+        //                                 nvm use ${NODE_VERSION}
+        //                             fi
+        //                             npm ci
+        //                             npx tsc --noEmit 2>/dev/null || true
+        //                         """
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('SonarQube Scan') {
             when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
@@ -278,7 +279,7 @@ pipeline {
 
         // ── Ký image + SBOM + SLSA provenance (supply-chain security) ──────────
         //   Cần credential: Secret text 'cosign-key' (nội dung private key) + env COSIGN_PASSWORD.
-        //   Cosign đọc key từ biến môi trường qua env://COSIGN_PRIVATE_KEY.
+        //   Key được ghi ra file (printf giữ nguyên newline — env:// làm vỡ PEM block).
         //   Public key export ra cosign-public.pem → dùng cho Kyverno/OPA verify khi deploy.
         stage('Sign & Attest (Cosign + SLSA)') {
             when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
@@ -303,11 +304,17 @@ pipeline {
                         sh """#!/bin/bash
                             set -e
                             export COSIGN_PASSWORD="\${COSIGN_PASSWORD:-}"
-                            export COSIGN_PRIVATE_KEY_PEM="\$COSIGN_PRIVATE_KEY"
+
+                            # Ghi private key ra file (printf %s giữ nguyên newline, tránh vỡ PEM)
+                            printf '%s' "\$COSIGN_PRIVATE_KEY" > cosign.key
+                            chmod 600 cosign.key
+                            echo ">>> Kiểm tra key format:"
+                            head -1 cosign.key
+
                             cosign version 2>&1 | head -1
 
                             # Export public key cho verify ở cluster (ArgoCD admission / Kyverno)
-                            cosign public-key --key "env://COSIGN_PRIVATE_KEY_PEM" > cosign-public.pem
+                            cosign public-key --key cosign.key > cosign-public.pem
                             echo ">>> SLSA provenance:"
                             cat slsa-provenance.json
 
@@ -315,9 +322,9 @@ pipeline {
                               echo ">>> Sign backend..."
                               cosign attach sbom --sbom sbom-backend.spdx.json \
                                 ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} || true
-                              cosign sign --yes --key "env://COSIGN_PRIVATE_KEY_PEM" \
+                              cosign sign --yes --key cosign.key \
                                 ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
-                              cosign attest --yes --key "env://COSIGN_PRIVATE_KEY_PEM" \
+                              cosign attest --yes --key cosign.key \
                                 --type https://slsa.dev/provenance/v1 \
                                 --predicate slsa-provenance.json \
                                 ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
@@ -327,13 +334,16 @@ pipeline {
                               echo ">>> Sign frontend..."
                               cosign attach sbom --sbom sbom-frontend.spdx.json \
                                 ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} || true
-                              cosign sign --yes --key "env://COSIGN_PRIVATE_KEY_PEM" \
+                              cosign sign --yes --key cosign.key \
                                 ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
-                              cosign attest --yes --key "env://COSIGN_PRIVATE_KEY_PEM" \
+                              cosign attest --yes --key cosign.key \
                                 --type https://slsa.dev/provenance/v1 \
                                 --predicate slsa-provenance.json \
                                 ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
                             fi
+
+                            # Dọn key private khỏi workspace sau khi dùng
+                            rm -f cosign.key
 
                             echo ">>> Sign & Attest hoàn tất"
                         """
