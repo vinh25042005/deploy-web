@@ -158,6 +158,7 @@ path "secret/data/postgres" { capabilities = ["read"] }
 path "secret/data/jwt"      { capabilities = ["read"] }
 path "secret/data/grafana"  { capabilities = ["read"] }
 path "secret/data/database" { capabilities = ["read"] }
+path "secret/data/cosign"   { capabilities = ["read"] }
 EOF
 vault policy write techshop /tmp/techshop-policy.hcl'
 
