@@ -446,8 +446,15 @@ resource "terraform_data" "apply_kyverno_policies" {
         sleep 10
       done
       echo ">>> Applying Kyverno policies..."
-      kubectl apply -f ${path.module}/../../kyverno/ 2>/dev/null || \
-        kubectl apply -f ${path.module}/../../kyverno/verify-image.yaml
+      kubectl apply -f ${path.module}/../../kyverno/ || exit 1
+
+      echo ">>> Verifying Kyverno policies..."
+      if kubectl get clusterpolicy verify-image >/dev/null 2>&1; then
+        echo "  ✅ verify-image policy applied"
+      else
+        echo "  ❌ verify-image policy KHÔNG tồn tại sau khi apply!"
+        exit 1
+      fi
       echo ">>> Kyverno policies applied"
     EOT
   }
