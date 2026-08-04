@@ -156,7 +156,7 @@ pipeline {
                             sonar-scanner \
                                 -Dsonar.projectKey=techshop-app \
                                 -Dsonar.sources=frontend/src,backend/src \
-                                -Dsonar.host.url=http://172.18.0.2:9000 \
+                                -Dsonar.host.url=http://sonarqube:9000 \
                                 -Dsonar.token=$SONAR_TOKEN \
                                 -Dsonar.qualitygate.wait=true \
                                 -Dsonar.exclusions=**/node_modules/**,**/*.test.ts,**/*.spec.ts \
