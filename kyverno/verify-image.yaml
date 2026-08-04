@@ -32,16 +32,15 @@ spec:
                 - Pod
       verifyImages:
         - image: "docker.io/vinh2504/*"
+          # Audit mode không được mutate image digest (bắt buộc của Kyverno)
+          mutateDigest: false
           attestors:
             - count: 1
               entries:
+                # keys.secret = object tham chiếu K8s Secret chứa public key
+                # (Secret cosign-pub do External Secrets tạo từ Vault, namespace techshop-stg).
+                # Cú pháp Kyverno mới: secret là OBJECT { name, namespace }.
                 - keys:
-                    secret: cosign-pub
-                    fields:
-                      - name: cosign.pub
-                  # Hoặc khai báo key trực tiếp (không cần Secret):
-                  # - keys:
-                  #     publicKeys: |-
-                  #       -----BEGIN PUBLIC KEY-----
-                  #       ...
-                  #       -----END PUBLIC KEY-----
+                    secret:
+                        name: cosign-pub
+                        namespace: techshop-stg
