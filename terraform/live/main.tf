@@ -440,7 +440,7 @@ resource "terraform_data" "apply_kyverno_policies" {
       for i in $(seq 1 30); do
         if kubectl get pod -n kyverno -l app.kubernetes.io/name=kyverno \
           -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q True; then
-          echo "  Kyverno Ready sau ${i}0s"
+          echo "  Kyverno Ready sau $${i}0s"
           break
         fi
         sleep 10
