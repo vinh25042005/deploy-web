@@ -276,6 +276,74 @@ pipeline {
             }
         }
 
+        // ── Ký image + SBOM + SLSA provenance (supply-chain security) ──────────
+        //   Cần credential: file 'cosign-key' (private key) + env COSIGN_PASSWORD.
+        //   Tạo key:  cosign generate-key-pair k8s://  hoặc  cosign generate-key-pair
+        //   Public key export ra cosign-public.pem → dùng cho Kyverno/OPA verify khi deploy.
+        stage('Sign & Attest (Cosign + SLSA)') {
+            when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
+            steps {
+                dir('app-source') {
+                    withCredentials([file(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                        sh """#!/bin/bash
+                            set -e
+                            export COSIGN_PASSWORD="\${COSIGN_PASSWORD:-}"
+                            cosign version 2>&1 | head -1
+
+                            # Export public key cho verify ở cluster (ArgoCD admission / Kyverno)
+                            cosign public-key --key "\$COSIGN_PRIVATE_KEY" > cosign-public.pem
+
+                            # SLSA provenance predicate (ai build, từ commit nào)
+                            cat > slsa-provenance.json <<'PRED'
+                            {
+                              "builder": { "id": "https://jenkins/techshop-ci" },
+                              "buildType": "https://jenkins/techshop-ci",
+                              "invocation": {
+                                "configSource": { "uri": "git+https://github.com/vinh25042005/deploy-web.git", "digest": { "sha1": "${GIT_COMMIT_SHORT}" } }
+                              },
+                              "metadata": { "buildStartedOn": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" },
+                              "materials": [
+                                { "uri": "git+https://github.com/vinh25042005/techshop-app.git", "digest": { "sha1": "${GIT_COMMIT_SHORT}" } }
+                              ]
+                            }
+                            PRED
+
+                            if [ "${env.BUILD_BACKEND}" != "false" ]; then
+                              echo ">>> Sign backend..."
+                              cosign attach sbom --sbom sbom-backend.spdx.json \
+                                ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} || true
+                              cosign sign --yes --key "\$COSIGN_PRIVATE_KEY" \
+                                ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                              cosign attest --yes --key "\$COSIGN_PRIVATE_KEY" \
+                                --type https://slsa.dev/provenance/v1 \
+                                --predicate slsa-provenance.json \
+                                ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                            fi
+
+                            if [ "${env.BUILD_FRONTEND}" != "false" ]; then
+                              echo ">>> Sign frontend..."
+                              cosign attach sbom --sbom sbom-frontend.spdx.json \
+                                ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} || true
+                              cosign sign --yes --key "\$COSIGN_PRIVATE_KEY" \
+                                ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                              cosign attest --yes --key "\$COSIGN_PRIVATE_KEY" \
+                                --type https://slsa.dev/provenance/v1 \
+                                --predicate slsa-provenance.json \
+                                ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                            fi
+
+                            echo ">>> Sign & Attest hoàn tất"
+                        """
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'app-source/cosign-public.pem', allowEmptyArchive: true
+                }
+            }
+        }
+
         stage('Commit tag to Git') {
             when { expression { env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false' } }
             steps {
