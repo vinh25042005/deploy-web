@@ -284,6 +284,21 @@ pipeline {
             when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
             steps {
                 dir('app-source') {
+                    // Sinh SLSA provenance JSON bằng Groovy (tránh escape $ trong shell heredoc)
+                    script {
+                        def prov = [
+                            builder: [id: 'https://jenkins/techshop-ci'],
+                            buildType: 'https://jenkins/techshop-ci',
+                            invocation: [
+                                configSource: [uri: 'git+https://github.com/vinh25042005/deploy-web.git', digest: [sha1: env.GIT_COMMIT_SHORT]]
+                            ],
+                            metadata: [buildStartedOn: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))],
+                            materials: [
+                                [uri: 'git+https://github.com/vinh25042005/techshop-app.git', digest: [sha1: env.GIT_COMMIT_SHORT]]
+                            ]
+                        ]
+                        writeFile file: 'slsa-provenance.json', text: groovy.json.JsonOutput.toJson(prov)
+                    }
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
                         sh """#!/bin/bash
                             set -e
@@ -293,21 +308,8 @@ pipeline {
 
                             # Export public key cho verify ở cluster (ArgoCD admission / Kyverno)
                             cosign public-key --key "env://COSIGN_PRIVATE_KEY_PEM" > cosign-public.pem
-
-                            # SLSA provenance predicate (ai build, từ commit nào)
-                            cat > slsa-provenance.json <<'PRED'
-                            {
-                              "builder": { "id": "https://jenkins/techshop-ci" },
-                              "buildType": "https://jenkins/techshop-ci",
-                              "invocation": {
-                                "configSource": { "uri": "git+https://github.com/vinh25042005/deploy-web.git", "digest": { "sha1": "${GIT_COMMIT_SHORT}" } }
-                              },
-                              "metadata": { "buildStartedOn": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" },
-                              "materials": [
-                                { "uri": "git+https://github.com/vinh25042005/techshop-app.git", "digest": { "sha1": "${GIT_COMMIT_SHORT}" } }
-                              ]
-                            }
-                            PRED
+                            echo ">>> SLSA provenance:"
+                            cat slsa-provenance.json
 
                             if [ "${env.BUILD_BACKEND}" != "false" ]; then
                               echo ">>> Sign backend..."
