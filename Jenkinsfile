@@ -305,15 +305,16 @@ pipeline {
                         //   Jenkins Secret text có thể dồn key thành 1 dòng hoặc giữ '\n' literal
                         //   → cosign báo "invalid pem block". Groovy tự rebuild PEM đúng chuẩn.
                         script {
+                            // KHÔNG lưu Matcher vào biến (Matcher không serializable → NotSerializableException
+                            // khi Jenkins lưu trạng thái pipeline). Dùng inline [0][1] để lấy String ngay.
                             def rawKey = COSIGN_PRIVATE_KEY.replace('\\n', '\n')  // literal \n → newline
-                            def matcher = (rawKey =~ /-----BEGIN ([^-]+)-----(.*?)-----END ([^-]+)-----/)
-                            if (!matcher.find()) {
-                                error "ERROR: cannot find PEM block in cosign key"
-                            }
-                            def header = "-----BEGIN ${matcher.group(1)}-----"
-                            def footer = "-----END ${matcher.group(3)}-----"
-                            def body = matcher.group(2).replaceAll(/\s+/, '')   // strip mọi whitespace trong body
-                            def wrapped = body.replaceAll(/(.{64})/, '$1\n')    // wrap 64 ký tự/dòng
+                            def header = "-----BEGIN ${(rawKey =~ /-----BEGIN ([^-]+)-----/)[0][1]}-----"
+                            def footer = "-----END ${(rawKey =~ /-----END ([^-]+)-----/)[0][1]}-----"
+                            def body = rawKey
+                                .replaceAll(/-----BEGIN [^-]+-----/, '')
+                                .replaceAll(/-----END [^-]+-----/, '')
+                                .replaceAll(/\s+/, '')                             // strip whitespace
+                            def wrapped = body.replaceAll(/(.{64})/, '$1\n')       // wrap 64 ký tự/dòng
                             writeFile file: 'cosign.key', text: "${header}\n${wrapped}\n${footer}\n"
                             sh 'chmod 600 cosign.key'
                         }
