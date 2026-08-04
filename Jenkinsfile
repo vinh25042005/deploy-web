@@ -305,11 +305,26 @@ pipeline {
                             set -e
                             export COSIGN_PASSWORD="\${COSIGN_PASSWORD:-}"
 
-                            # Ghi private key ra file (printf %s giữ nguyên newline, tránh vỡ PEM)
-                            printf '%s' "\$COSIGN_PRIVATE_KEY" > cosign.key
+                            # ── Chuẩn hóa PEM: dù key bị dán méo newline vẫn rebuild đúng chuẩn ──
+                            #   (Jenkins Secret text có thể dồn key thành 1 dòng hoặc giữ '\n' literal
+                            #    → cosign báo "invalid pem block". Python dưới đây tự phục hồi.)
+                            python3 - <<'PYEOF' > cosign.key
+                            import re, sys
+                            raw = sys.stdin.read()
+                            raw = raw.replace('\\\\n', '\\n')
+                            m = re.search(r'-----BEGIN ([^-]+)-----(.*?)-----END ([^-]+)-----', raw, re.S)
+                            if not m:
+                                sys.stderr.write('ERROR: cannot find PEM block in cosign key\\n'); sys.exit(1)
+                            header = '-----BEGIN ' + m.group(1) + '-----'
+                            footer = '-----END ' + m.group(3) + '-----'
+                            body = re.sub(r'\\s+', '', m.group(2))
+                            wrapped = '\\n'.join(body[j:j+64] for j in range(0, len(body), 64))
+                            sys.stdout.write(header + '\\n' + wrapped + '\\n' + footer + '\\n')
+                            PYEOF
                             chmod 600 cosign.key
                             echo ">>> Kiểm tra key format:"
                             head -1 cosign.key
+                            wc -l cosign.key
 
                             cosign version 2>&1 | head -1
 
