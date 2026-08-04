@@ -6,6 +6,7 @@ externalSecrets:
   backendSecrets: true
   postgresCredentials: true
   grafanaAdmin: true
+  cosignPub: true      # public key cosign → Kyverno verify image khi deploy
 
 images:
   backend: docker.io/vinh2504/deploy-web-backend:latest

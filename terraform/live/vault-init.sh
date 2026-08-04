@@ -115,6 +115,17 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
 kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   vault kv put secret/database url="postgresql://postgres:${POSTGRES_PASS}@postgres:5432/shopdb?schema=public"
 
+# ── Cosign public key (cho Kyverno verify image khi deploy) ──
+# Nếu có file cosign.pub trên host (sinh thủ công) thì lưu vào Vault.
+if [ -f "${COSIGN_PUB_PATH:-$HOME/cosign.pub}" ]; then
+  COSIGN_PUB=$(cat "${COSIGN_PUB_PATH:-$HOME/cosign.pub}")
+  kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+    vault kv put secret/cosign public_key="$COSIGN_PUB" 2>/dev/null || true
+  echo "  ✅ Lưu cosign public key vào Vault (secret/cosign)"
+else
+  echo "  ⚠️ Không tìm thấy cosign.pub — bỏ qua (Kyverno verify sẽ không có key)"
+fi
+
 # ── Store passwords in SSM (để Terraform/Helm reference sau) ──────────────
 echo ">>> [7b] Storing passwords in AWS SSM for External Secrets..."
 aws ssm put-parameter --name "$SSM_PREFIX/postgres-password" \

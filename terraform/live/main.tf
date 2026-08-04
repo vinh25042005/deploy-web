@@ -408,6 +408,51 @@ resource "helm_release" "external_secrets" {
   wait             = false
 }
 
+# ── Kyverno (Policy-as-Code / admission controller) ──
+#   Dùng để verify cosign signature khi deploy: chỉ cho phép image đã ký.
+#   Policy: kyverno/verify-image.yaml (mode Audit trước → Enforce sau).
+resource "helm_release" "kyverno" {
+  depends_on = [terraform_data.wait_k8s_api, helm_release.external_secrets]
+
+  name       = "kyverno"
+  namespace  = "kyverno"
+  repository = "https://kyverno.github.io/kyverno/"
+  chart      = "kyverno"
+
+  create_namespace = true
+  wait             = false
+
+  set = [
+    {
+      name  = "reportsController.enabled"
+      value = "true"
+    }
+  ]
+}
+
+# ── Apply Kyverno policy (verify-image) ──
+resource "terraform_data" "apply_kyverno_policies" {
+  depends_on = [helm_release.kyverno, terraform_data.apply_manifests, terraform_data.update_argocd_branch]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo ">>> Waiting for Kyverno webhook ready..."
+      for i in $(seq 1 30); do
+        if kubectl get pod -n kyverno -l app.kubernetes.io/name=kyverno \
+          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q True; then
+          echo "  Kyverno Ready sau ${i}0s"
+          break
+        fi
+        sleep 10
+      done
+      echo ">>> Applying Kyverno policies..."
+      kubectl apply -f ${path.module}/../../kyverno/ 2>/dev/null || \
+        kubectl apply -f ${path.module}/../../kyverno/verify-image.yaml
+      echo ">>> Kyverno policies applied"
+    EOT
+  }
+}
+
 # ── Apply ExternalSecret manifests ──
 resource "terraform_data" "apply_manifests" {
   depends_on = [helm_release.external_secrets]
