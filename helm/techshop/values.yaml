@@ -119,10 +119,15 @@ kube-prometheus-stack:
     enabled: false
   alertmanager:
     enabled: false
-  # Tắt admission webhook của prometheus-operator — tránh PreSync hooks bị kẹt
-  # ("waiting for deletion of hook kube-promethe-admission") làm ArgoCD sync fail
+  # Tắt admission webhook + TLS của prometheus-operator:
+  #   - admissionWebhooks.enabled=false  → không tạo webhook/hook job (tránh PreSync hooks kẹt ArgoCD)
+  #   - tls.enabled=false                → operator KHÔNG mount secret <rel>-kube-promethe-admission
+  #     (nếu chỉ tắt webhook mà để tls.enabled=true, operator vẫn bắt buộc có secret admission
+  #      do hook job tạo → khi tắt webhook job không chạy → thiếu secret → operator ContainerCreating)
   prometheusOperator:
     admissionWebhooks:
+      enabled: false
+    tls:
       enabled: false
 
   # ─── Prometheus ───
