@@ -1,12 +1,9 @@
 namespace: techshop-dev
 
-# ─── External Secrets (Vault → K8s Secrets) ───
-externalSecrets:
-  enabled: true
-  backendSecrets: true
-  postgresCredentials: true
-  grafanaAdmin: true
-  cosignPub: true      # public key cosign → Kyverno verify image khi deploy
+# ─── Secrets: đọc TRỰC TIẾP từ Vault (Vault Agent Injector / vault CLI) — KHÔNG dùng ESO ───
+#   - backend / postgres / grafana: Vault Agent Injector tiêm thẳng vào pod
+#   - backup CronJob: vault CLI + kubernetes auth
+#   - cosign-pub / dockerhub-secret: pipeline (Jenkins) tạo từ Vault (xem Jenkinsfile)
 
 images:
   backend: docker.io/vinh2504/deploy-web-backend:latest
@@ -36,9 +33,7 @@ postgres:
   user: postgres
   # password: Vault Agent Injector tự động inject qua sidecar (xem templates/postgres.yaml)
   database: shopdb
-  existingSecret: postgres-credentials
-  existingSecretKey: password
-  # ↑ backup CronJob vẫn dùng secretRef này (Vault Agent không hỗ trợ CronJob)
+  # ↑ backup CronJob đọc password trực tiếp từ Vault bằng vault CLI (xem templates/postgres-backup.yaml)
   storage:
     size: 10Gi
     className: techshop-ssm-waitforfirstconsumer
@@ -143,11 +138,26 @@ kube-prometheus-stack:
       serviceMonitorSelectorNilUsesHelmValues: false
 
   # ─── Grafana ───
+  # Admin credentials đọc TRỰC TIẾP từ Vault (Vault Agent Injector → file,
+  # Grafana đọc qua GF_SECURITY_ADMIN_*__FILE). Không dùng ESO.
   grafana:
-    adminPassword: ""
-    admin:
-      existingSecret: grafana-admin
-      existingSecretKey: admin-password
+    podAnnotations:
+      vault.hashicorp.com/agent-inject: "true"
+      vault.hashicorp.com/role: "techshop"
+      vault.hashicorp.com/agent-inject-status: "update"
+      vault.hashicorp.com/agent-requests-cpu: "100m"
+      vault.hashicorp.com/agent-limits-cpu: "250m"
+      vault.hashicorp.com/agent-init-requests-cpu: "100m"
+      vault.hashicorp.com/agent-init-limits-cpu: "250m"
+      vault.hashicorp.com/agent-inject-secret-grafana-admin-password: "secret/data/grafana"
+      vault.hashicorp.com/agent-inject-template-grafana-admin-password: |
+        {{"{{"}} with secret "secret/data/grafana" }}{{"{{"}} .Data.data.admin_password }}{{"{{"}} end }}
+      vault.hashicorp.com/agent-inject-secret-grafana-admin-user: "secret/data/grafana"
+      vault.hashicorp.com/agent-inject-template-grafana-admin-user: |
+        {{"{{"}} with secret "secret/data/grafana" }}{{"{{"}} .Data.data.admin_username }}{{"{{"}} end }}
+    env:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/grafana-admin-password
+      GF_SECURITY_ADMIN_USER__FILE: /vault/secrets/grafana-admin-user
     service:
       type: ClusterIP
       port: 80

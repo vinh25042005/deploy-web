@@ -90,6 +90,11 @@ sudo docker exec -u root jenkins bash -c "
   curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o /usr/local/bin/cosign
   chmod +x /usr/local/bin/cosign
   cosign version 2>&1 | head -1
+  # Vault CLI — luồng CI đọc secret TRỰC TIẾP từ Vault (không qua ESO)
+  apt-get install -y -qq unzip 2>&1 | tail -1
+  curl -fsSL https://releases.hashicorp.com/vault/1.18.5/vault_1.18.5_linux_amd64.zip -o /tmp/vault.zip
+  unzip -o /tmp/vault.zip -d /usr/local/bin >/dev/null
+  vault --version 2>&1 | head -1
 "
 
 # ─── Cài AWS CLI + lấy kubeconfig từ SSM ───

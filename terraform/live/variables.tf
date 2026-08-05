@@ -20,14 +20,14 @@ variable "key_name" {
 }
 
 variable "instance_type" {
-  type    = string
-  default = "t3.large"
+  type        = string
+  default     = "t3.large"
   description = "EC2 instance type cho K8s control-plane nodes"
 }
 
 variable "ingress_instance_type" {
-  type    = string
-  default = "t3.small"
+  type        = string
+  default     = "t3.small"
   description = "EC2 instance type cho ingress nodes (only NGINX runs here)"
 }
 
@@ -37,8 +37,9 @@ variable "node_count" {
 }
 
 variable "ingress_count" {
-  type    = number
-  default = 2
+  type        = number
+  default     = 1
+  description = "Số EC2 ingress nodes (giảm còn 1 để tiết kiệm chi phí — mất HA, chấp nhận được cho lab)"
 }
 
 variable "frontend_port" {

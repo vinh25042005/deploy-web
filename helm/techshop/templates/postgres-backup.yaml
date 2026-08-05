@@ -26,11 +26,6 @@ spec:
               value: "postgres"
             - name: PGUSER
               value: {{ .Values.postgres.user | quote }}
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.postgres.existingSecret }}
-                  key: {{ .Values.postgres.existingSecretKey }}
             - name: PGDATABASE
               value: {{ .Values.postgres.database | quote }}
             - name: S3_BUCKET
@@ -41,7 +36,14 @@ spec:
             - /bin/sh
             - -c
             - |
-              apk add --no-cache aws-cli >/dev/null 2>&1
+              set -e
+              # Password đọc TRỰC TIẾP từ Vault (kubernetes auth — default SA, role techshop)
+              apk add --no-cache aws-cli unzip curl >/dev/null 2>&1
+              curl -fsSL https://releases.hashicorp.com/vault/1.18.5/vault_1.18.5_linux_amd64.zip -o /tmp/vault.zip
+              unzip -o /tmp/vault.zip -d /usr/local/bin >/dev/null
+              export VAULT_ADDR=http://vault.vault.svc.cluster.local:8200
+              vault login -method=kubernetes role=techshop >/dev/null
+              export PGPASSWORD=$(vault kv get -field=password secret/postgres)
               FILE="backup-$(date +%Y%m%d-%H%M%S).sql.gz"
               pg_dump -h $PGHOST -U $PGUSER -d $PGDATABASE | gzip > /tmp/$FILE
               aws s3 cp /tmp/$FILE s3://$S3_BUCKET/$FILE

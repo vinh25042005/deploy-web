@@ -39,3 +39,16 @@ roleRef:
   kind: Role
   name: readonly-role
   apiGroup: rbac.authorization.k8s.io
+---
+# ── SA cho Jenkins CI ────────────────────────────────────────────────────
+# Jenkins (standalone EC2) xác thực vào Vault bằng Kubernetes auth qua SA này:
+#   kubectl create token jenkins-ci -n techshop-dev --audience=vault
+#   vault login -method=kubernetes role=techshop-jenkins
+# Role techshop-jenkins được tạo bởi vault-init.sh / configure-ci-vault.sh.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins-ci
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

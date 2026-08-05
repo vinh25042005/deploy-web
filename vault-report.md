@@ -176,7 +176,15 @@ kubectl exec -n vault vault-0 -- vault operator unseal "$KEY"
 ```
 > `vault-init.sh` tự động làm việc này khi chạy lại (detect sealed → đọc key từ SSM → unseal).
 
-### 3.7 External Secrets Operator (ESO)
+### 3.7 Secret delivery runtime — Vault Agent Injector (thay ESO)
+
+> **Cập nhật 2026-08-05:** ESO (External Secrets Operator) đã được **gỡ bỏ**. Thay vì ESO sync Vault → K8s Secret → app đọc, giờ app đọc **trực tiếp từ Vault**:
+> - `backend` / `grafana` / `postgres`: **Vault Agent Injector** (`vault.hashicorp.com/agent-inject-*` annotation → init container viết secret vào `/vault/secrets` trong chính pod).
+> - `postgres-backup` (CronJob): `vault` CLI + kubernetes auth (role `techshop`) đọc `secret/postgres` ngay khi job chạy.
+> - `cosign-pub` (Kyverno) + `dockerhub-secret` (imagePullSecret): **pipeline (Jenkins)** tạo từ Vault (`secret/cosign`, `secret/ci/dockerhub`).
+> - Đã xóa: `helm_release.external_secrets` + `terraform_data.apply_manifests` (Terraform), `helm/techshop/templates/external-secrets.yaml`, `terraform/live/manifests/0*.yaml`.
+
+**Lợi ích:** ít trung gian hơn (bỏ operator + webhook + CRDs + 4 ExternalSecret); lỗi secret hiện ngay tại pod (Vault Agent init fail) thay vì bị giấu trong trạng thái sync của ESO.
 
 **Cần gì:**
 - Helm release `external-secrets` (namespace `external-secrets`)
@@ -215,6 +223,46 @@ spec:
 | `grafana-admin` | `grafana-admin` | `admin_password` |
 
 **Refresh:** mỗi `1h` (refreshInterval) — khi đổi secret trong Vault, K8s Secret tự cập nhật.
+
+---
+
+### 3.8 CI đọc secret TRỰC TIẾP từ Vault (không qua ESO)
+
+**Quyết định thiết kế:** Luồng CI (Jenkins) **không** đọc secret từ k8s Secret do ESO đồng bộ. Thay vào đó Jenkins đọc thẳng từ Vault:
+
+- **Xác thực:** Kubernetes auth — `kubectl create token jenkins-ci -n techshop-dev --audience=vault` → `vault login -method=kubernetes role=techshop-jenkins`.
+- **Kết nối:** `kubectl -n vault port-forward svc/vault 8200:8200` (Jenkins ngoài cluster, không lộ Vault ra public).
+- **Secret CI** (path `secret/ci/*`): `github` (token), `dockerhub` (username+token), `sonar` (token), `cosign` (private_key) — giá trị seed từ AWS SSM (`/techshop/*`), không hardcode.
+- **App config vars** đọc trực tiếp: `secret/database`, `secret/jwt`, `secret/postgres`, `secret/grafana`, `secret/cosign`.
+
+**Cấu hình (file):**
+
+| Thành phần | File |
+|---|---|
+| Seed CI secrets + policy + role | `terraform/live/vault-init.sh` (fresh) / `terraform/live/configure-ci-vault.sh` (idempotent, chạy trên cluster live) |
+| SA `jenkins-ci` | `helm/techshop/templates/rbac.yaml` (ArgoCD quản lý) |
+| Vault CLI trong Jenkins | `terraform/jenkins-standalone/jenkins-init.sh` |
+| Pipeline fetch + dùng secret | `Jenkinsfile` (stage `Fetch Secrets from Vault`, bỏ `withCredentials`) |
+
+**Kích hoạt trên cluster đang chạy (runbook):**
+```bash
+# 1. Seed các token chưa có vào SSM (nếu thiếu)
+aws ssm put-parameter --name /techshop/sonar-token --type SecureString \
+  --value '<SONAR_TOKEN>' --overwrite --region ap-southeast-1
+aws ssm put-parameter --name /techshop/cosign-private-key --type SecureString \
+  --value "$(cat ~/cosign.key)" --overwrite --region ap-southeast-1
+
+# 2. Cấu hình Vault (CI secrets + policy + role techshop-jenkins + SA jenkins-ci)
+bash terraform/live/configure-ci-vault.sh ap-southeast-1
+
+# 3. Cài Vault CLI trong Jenkins container (một lần, nếu chưa rebuild)
+sudo docker exec -u root jenkins bash -c \
+  "apt-get install -y -qq unzip >/dev/null && \
+   curl -fsSL https://releases.hashicorp.com/vault/1.18.5/vault_1.18.5_linux_amd64.zip -o /tmp/vault.zip && \
+   unzip -o /tmp/vault.zip -d /usr/local/bin >/dev/null && vault --version"
+
+# 4. Đẩy code (Jenkinsfile + rbac.yaml) → ArgoCD sync để SA jenkins-ci có mặt
+```
 
 ---
 

@@ -116,14 +116,14 @@ resource "aws_lb_target_group" "ingress_https" {
 
 # Gắn ingress nodes vào target group (dùng instance ID)
 resource "aws_lb_target_group_attachment" "ingress_http" {
-  count            = 2
+  count            = var.ingress_count
   target_group_arn = aws_lb_target_group.ingress_http.arn
   target_id        = module.compute.ingress_instance_ids[count.index]
   port             = 80
 }
 
 resource "aws_lb_target_group_attachment" "ingress_https" {
-  count            = 2
+  count            = var.ingress_count
   target_group_arn = aws_lb_target_group.ingress_https.arn
   target_id        = module.compute.ingress_instance_ids[count.index]
   port             = 443
@@ -401,24 +401,11 @@ resource "helm_release" "argo_rollouts" {
   create_namespace = true
 }
 
-# ── External Secrets Operator (đồng bộ Vault → K8s Secret) ──
-resource "helm_release" "external_secrets" {
-  depends_on = [terraform_data.wait_k8s_api, terraform_data.vault_init]
-
-  name       = "external-secrets"
-  namespace  = "external-secrets"
-  repository = "https://charts.external-secrets.io"
-  chart      = "external-secrets"
-
-  create_namespace = true
-  wait             = false
-}
-
 # ── Kyverno (Policy-as-Code / admission controller) ──
 #   Dùng để verify cosign signature khi deploy: chỉ cho phép image đã ký.
 #   Policy: kyverno/verify-image.yaml (mode Audit trước → Enforce sau).
 resource "helm_release" "kyverno" {
-  depends_on = [terraform_data.wait_k8s_api, helm_release.external_secrets]
+  depends_on = [terraform_data.wait_k8s_api]
 
   name       = "kyverno"
   namespace  = "kyverno"
@@ -438,7 +425,7 @@ resource "helm_release" "kyverno" {
 
 # ── Apply Kyverno policy (verify-image) ──
 resource "terraform_data" "apply_kyverno_policies" {
-  depends_on = [helm_release.kyverno, terraform_data.apply_manifests, terraform_data.update_argocd_branch]
+  depends_on = [helm_release.kyverno, terraform_data.update_argocd_branch]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -462,33 +449,6 @@ resource "terraform_data" "apply_kyverno_policies" {
         exit 1
       fi
       echo ">>> Kyverno policies applied"
-    EOT
-  }
-}
-
-# ── Apply ExternalSecret manifests ──
-resource "terraform_data" "apply_manifests" {
-  depends_on = [helm_release.external_secrets]
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo ">>> Waiting for external-secrets webhook to be ready..."
-      for i in $(seq 1 30); do
-        if kubectl get pods -n external-secrets -l app.kubernetes.io/name=external-secrets-webhook \
-          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q True; then
-          echo "  Webhook Ready after $${i}0s"
-          break
-        fi
-        if [ $i -eq 30 ]; then
-          echo "ERROR: external-secrets webhook not Ready after 5 minutes!"
-          kubectl describe pods -n external-secrets -l app.kubernetes.io/name=external-secrets-webhook
-          exit 1
-        fi
-        sleep 10
-      done
-      echo ">>> Applying manifests..."
-      kubectl apply -f ${path.module}/manifests/
-      echo ">>> Manifests applied successfully!"
     EOT
   }
 }
@@ -521,7 +481,7 @@ resource "terraform_data" "update_argocd_branch" {
 # lên rồi ghi DB config. Nếu postgres không lên trong DB_WAIT_SECONDS (mặc định
 # 600s) → fail để lần apply sau tự retry (terraform re-run provisioner).
 resource "terraform_data" "configure_vault_db" {
-  depends_on = [terraform_data.vault_init, terraform_data.apply_manifests, terraform_data.update_argocd_branch]
+  depends_on = [terraform_data.vault_init, terraform_data.update_argocd_branch]
 
   provisioner "local-exec" {
     command = "bash ${path.module}/configure-vault-db.sh ${var.region}"

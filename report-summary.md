@@ -29,7 +29,7 @@
 - **KMS auto-unseal** với AWS KMS → Vault tự unseal khi khởi động, **không cần unseal thủ công** (verified: xóa pod → tự unseal lại).
 - **Secret Engine KV v2**: lưu `postgres`, `jwt`, `grafana`, `database`,...
 - **Kubernetes auth method**: role `techshop` → pod/ESO xác thực bằng Service Account JWT.
-- **External Secrets Operator (ESO)**: `ClusterSecretStore vault-backend` → `ExternalSecret` → đồng bộ thành K8s Secret → app đọc như secret thường.
+- **Vault Agent Injector (thay ESO)**: app đọc secret TRỰC TIẾP từ Vault — backend/grafana dùng `agent-inject`, postgres đã dùng sẵn, backup CronJob dùng `vault` CLI + kubernetes auth. **ESO đã gỡ bỏ** (giảm 1 operator + webhook + CR, lỗi secret hiện ngay tại pod).
 - **Dynamic Database Secrets**: Vault cấp credential Postgres động theo TTL (1h/24h) qua plugin `postgresql-database-plugin`.
 - **Backup/recovery**: root token & unseal thông tin lưu vào **AWS SSM** (`/techshop/*`).
 - **Vault Agent Injector**: tiêm secret vào pod qua annotation (dùng cho postgres lấy password từ Vault).
@@ -71,6 +71,6 @@
 | Hạng mục | Trạng thái |
 |---|---|
 | SonarQube quality gate | ✅ Pass trong CI |
-| Vault + ESO + Dynamic DB secrets | ✅ Hoạt động, secret không hardcode |
+| Vault (Agent Injector) + Dynamic DB secrets | ✅ Hoạt động, mọi secret đọc từ Vault, ESO đã gỡ |
 | Canary analysis (Prometheus) | ✅ Metric có data thật, analysis chạy đúng |
 | Blue-Green / Canary rollout | ✅ Deploy theo bước, tự động rollback khi lỗi |

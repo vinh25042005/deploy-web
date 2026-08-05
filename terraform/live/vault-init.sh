@@ -138,6 +138,46 @@ aws ssm put-parameter --name "$SSM_PREFIX/database-url" \
   --value "postgresql://postgres:${POSTGRES_PASS}@postgres:5432/shopdb?schema=public" \
   --type SecureString --overwrite --region "$REGION"
 
+# ── CI credentials vào Vault (luồng CI đọc TRỰC TIẾP từ Vault, không qua ESO) ──
+#   Giá trị lấy từ SSM (đã tồn tại: /techshop/github-token, /techshop/docker-pat).
+#   Thiếu token nào → bỏ qua path đó (kèm cảnh báo). Chạy lại configure-ci-vault.sh
+#   sau khi seed SSM là bổ sung được.
+echo ">>> [7c] Storing CI credentials in Vault (đọc từ SSM)..."
+
+CI_GITHUB_TOKEN=$(aws ssm get-parameter --name "$SSM_PREFIX/github-token" --with-decryption --region "$REGION" --query Parameter.Value --output text 2>/dev/null || echo "")
+if [ -n "$CI_GITHUB_TOKEN" ]; then
+  CI_GITHUB_USER=$(aws ssm get-parameter --name "$SSM_PREFIX/github-username" --with-decryption --region "$REGION" --query Parameter.Value --output text 2>/dev/null || echo "x-access-token")
+  kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+    vault kv put secret/ci/github username="$CI_GITHUB_USER" token="$CI_GITHUB_TOKEN"
+else
+  echo "  ⚠️  SSM $SSM_PREFIX/github-token trống — bỏ qua secret/ci/github"
+fi
+
+CI_DOCKER_PAT=$(aws ssm get-parameter --name "$SSM_PREFIX/docker-pat" --with-decryption --region "$REGION" --query Parameter.Value --output text 2>/dev/null || echo "")
+if [ -n "$CI_DOCKER_PAT" ]; then
+  CI_DOCKER_USER=$(aws ssm get-parameter --name "$SSM_PREFIX/docker-username" --with-decryption --region "$REGION" --query Parameter.Value --output text 2>/dev/null || echo "vinh2504")
+  kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+    vault kv put secret/ci/dockerhub username="$CI_DOCKER_USER" token="$CI_DOCKER_PAT"
+else
+  echo "  ⚠️  SSM $SSM_PREFIX/docker-pat trống — bỏ qua secret/ci/dockerhub"
+fi
+
+CI_SONAR_TOKEN=$(aws ssm get-parameter --name "$SSM_PREFIX/sonar-token" --with-decryption --region "$REGION" --query Parameter.Value --output text 2>/dev/null || echo "")
+if [ -n "$CI_SONAR_TOKEN" ]; then
+  kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+    vault kv put secret/ci/sonar token="$CI_SONAR_TOKEN"
+else
+  echo "  ⚠️  SSM $SSM_PREFIX/sonar-token trống — bỏ qua secret/ci/sonar"
+fi
+
+CI_COSIGN_PRIVATE_KEY=$(aws ssm get-parameter --name "$SSM_PREFIX/cosign-private-key" --with-decryption --region "$REGION" --query Parameter.Value --output text 2>/dev/null || echo "")
+if [ -n "$CI_COSIGN_PRIVATE_KEY" ]; then
+  kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+    vault kv put secret/ci/cosign private_key="$CI_COSIGN_PRIVATE_KEY"
+else
+  echo "  ⚠️  SSM $SSM_PREFIX/cosign-private-key trống — bỏ qua secret/ci/cosign"
+fi
+
 # ── Configure K8s auth ────────────────────────────────────────────────────
 echo ">>> [8/9] Configuring Kubernetes auth..."
 SA_JWT=$(kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- cat /var/run/secrets/kubernetes.io/serviceaccount/token)
@@ -154,11 +194,15 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
 echo ">>> [9/9] Creating policy + auth role..."
 kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   sh -c 'cat > /tmp/techshop-policy.hcl << EOF
-path "secret/data/postgres" { capabilities = ["read"] }
-path "secret/data/jwt"      { capabilities = ["read"] }
-path "secret/data/grafana"  { capabilities = ["read"] }
-path "secret/data/database" { capabilities = ["read"] }
-path "secret/data/cosign"   { capabilities = ["read"] }
+path "secret/data/postgres"    { capabilities = ["read"] }
+path "secret/data/jwt"         { capabilities = ["read"] }
+path "secret/data/grafana"     { capabilities = ["read"] }
+path "secret/data/database"    { capabilities = ["read"] }
+path "secret/data/cosign"      { capabilities = ["read"] }
+path "secret/data/ci/github"    { capabilities = ["read"] }
+path "secret/data/ci/dockerhub" { capabilities = ["read"] }
+path "secret/data/ci/sonar"     { capabilities = ["read"] }
+path "secret/data/ci/cosign"    { capabilities = ["read"] }
 EOF
 vault policy write techshop /tmp/techshop-policy.hcl'
 
@@ -168,6 +212,14 @@ kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
   bound_service_account_namespaces="techshop-dev,techshop-stg" \
   policies=techshop \
   ttl=24h
+
+# Role riêng cho Jenkins CI — least privilege: chỉ SA jenkins-ci ở techshop-dev, ttl ngắn
+kubectl exec -n "$VAULT_NS" "$VAULT_POD" -- env VAULT_TOKEN="$ROOT_TOKEN" \
+  vault write auth/kubernetes/role/techshop-jenkins \
+  bound_service_account_names="jenkins-ci" \
+  bound_service_account_namespaces="techshop-dev" \
+  policies=techshop \
+  ttl=1h
 
 # ── Dynamic Database Secrets (Postgres) ───────────────────────────────────
 # Lưu ý: postgres (techshop-dev) do ArgoCD deploy SAU terraform apply, nên

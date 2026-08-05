@@ -12,11 +12,15 @@ pipeline {
         booleanParam(name: 'SKIP_BACKEND', defaultValue: false, description: 'Skip backend (chỉ build frontend)')
         booleanParam(name: 'SKIP_FRONTEND', defaultValue: false, description: 'Skip frontend (chỉ build backend)')
         booleanParam(name: 'BUILD_FULL', defaultValue: false, description: 'Build full — bỏ qua detect thay đổi, build cả backend + frontend')
+        string(name: 'DEPLOY_BRANCH', defaultValue: 'week-6-argo-rollouts', description: 'Branch deploy-web mà ArgoCD đang track (argocd/root.yaml targetRevision)')
     }
 
     environment {
         REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+
+        // Vault — CI đọc secret TRỰC TIẾP từ Vault (port-forward local), không qua ESO → k8s
+        VAULT_ADDR = 'http://127.0.0.1:8200'
 
         // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
@@ -45,14 +49,113 @@ pipeline {
             }
         }
 
+        // ── Lấy secret TRỰC TIẾP từ Vault (KHÔNG qua ESO → k8s) ────────────────
+        //   Jenkins (standalone EC2, ngoài cluster) truy cập Vault bằng Kubernetes auth:
+        //     1. kubectl port-forward svc/vault → reach Vault in-cluster (không lộ Vault ra ngoài)
+        //     2. kubectl create token jenkins-ci (SA do Helm chart / ArgoCD quản lý)
+        //     3. vault login -method=kubernetes role=techshop-jenkins (least-privilege, ttl 1h)
+        //   Chỉ fetch ĐÚNG các secret pipeline dùng (CI credentials) — least privilege,
+        //   ít điểm lỗi: secret thiếu → fail ngay tại đây, không đọc thừa.
+        stage('Fetch Secrets from Vault') {
+            steps {
+                script {
+                    // 1) Port-forward tới Vault (chạy nền — đóng ở post.always)
+                    sh 'nohup kubectl -n vault port-forward svc/vault 8200:8200 >/tmp/vault-pf.log 2>&1 &'
+                    sh """
+                        READY=0
+                        for i in \$(seq 1 20); do
+                            if vault status -format=json >/dev/null 2>&1; then
+                                READY=1
+                                echo '>>> Vault reachable via port-forward'
+                                break
+                            fi
+                            echo "  waiting Vault... \$i"
+                            sleep 2
+                        done
+                        [ "\$READY" = "1" ] || { echo 'ERROR: không reach được Vault (xem /tmp/vault-pf.log)'; exit 1; }
+                    """
+
+                    // 2) Kubernetes auth — JWT của SA jenkins-ci (không in ra log)
+                    env.VAULT_JWT = sh(
+                        script: 'kubectl create token jenkins-ci -n techshop-dev --audience=vault',
+                        returnStdout: true
+                    ).trim()
+                    sh 'vault login -method=kubernetes role=techshop-jenkins jwt="$VAULT_JWT" >/dev/null'
+
+                    // 3) Nhóm CI credentials — đọc trực tiếp từ Vault
+                    env.GITHUB_TOKEN  = sh(script: 'vault kv get -field=token secret/ci/github', returnStdout: true).trim()
+                    env.DOCKER_USER   = sh(script: 'vault kv get -field=username secret/ci/dockerhub', returnStdout: true).trim()
+                    env.DOCKER_PAT    = sh(script: 'vault kv get -field=token secret/ci/dockerhub', returnStdout: true).trim()
+                    env.SONAR_TOKEN   = sh(script: 'vault kv get -field=token secret/ci/sonar', returnStdout: true).trim()
+                    env.COSIGN_PRIVATE_KEY = sh(script: 'vault kv get -field=private_key secret/ci/cosign', returnStdout: true).trim()
+                    env.COSIGN_PUBLIC_KEY  = sh(script: 'vault kv get -field=public_key secret/cosign', returnStdout: true).trim()
+
+                    // 4) Git credential helper — dùng cho clone app + push deploy repo
+                    //    (tránh nhúng token vào URL/log)
+                    sh """
+                        printf 'https://x-access-token:%s@github.com\\n' "\$GITHUB_TOKEN" > ~/.git-credentials
+                        chmod 600 ~/.git-credentials
+                        git config --global credential.helper store
+                    """
+                    echo '>>> Đã nạp secret từ Vault (không in giá trị ra log)'
+                }
+            }
+            post {
+                always {
+                    sh 'pkill -f "port-forward svc/vault" || true'
+                }
+            }
+        }
+
+        // ── Reconcile k8s Secret phái sinh TỪ Vault (thay ESO, không qua ESO) ──
+        //   - dockerhub-secret (imagePullSecret) ← secret/ci/dockerhub
+        //   - cosign-pub (Kyverno verify image) ← secret/cosign (public key)
+        //   Lỗi hiện ngay tại stage này, không bị giấu trong trạng thái sync operator.
+        stage('Reconcile Cluster Secrets (từ Vault)') {
+            steps {
+                script {
+                    sh """
+                        set -e
+                        for ns in techshop-dev techshop-stg; do
+                            if kubectl get namespace "\$ns" >/dev/null 2>&1; then
+                                kubectl create secret docker-registry dockerhub-secret -n "\$ns" \\
+                                    --docker-server=docker.io \\
+                                    --docker-username="\$DOCKER_USER" \\
+                                    --docker-password="\$DOCKER_PAT" \\
+                                    --dry-run=client -o yaml | kubectl apply -f -
+                                echo "  ✅ dockerhub-secret đã sync (\$ns) từ Vault"
+                            else
+                                echo "  ⏭️  bỏ qua \$ns (namespace chưa tồn tại)"
+                            fi
+                        done
+                    """
+                    sh """
+                        set -e
+                        printf '%s' "\$COSIGN_PUBLIC_KEY" > /tmp/cosign.pub
+                        if kubectl get namespace techshop-stg >/dev/null 2>&1; then
+                            kubectl create secret generic cosign-pub -n techshop-stg \\
+                                --from-file=cosign.pub=/tmp/cosign.pub \\
+                                --dry-run=client -o yaml | kubectl apply -f -
+                            echo '  ✅ cosign-pub đã sync (techshop-stg) từ Vault'
+                        fi
+                    """
+                }
+            }
+        }
+
         stage('Init') {
             parallel {
                 stage('Clone App Source') {
                     steps {
                         dir('app-source') {
-                            git branch: "${APP_BRANCH}",
-                                url: "${APP_REPO}",
-                                credentialsId: 'github-token'
+                            // Token GitHub nạp từ Vault (secret/ci/github) qua git credential helper
+                            sh "git clone --branch '${APP_BRANCH}' '${APP_REPO}' ."
+                            script {
+                                // Commit thật của app-source — dùng cho SLSA provenance materials
+                                env.APP_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                                env.APP_COMMIT_FULL  = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                                echo "→ App source commit: ${env.APP_COMMIT_SHORT}"
+                            }
                         }
                     }
                 }
@@ -151,19 +254,18 @@ pipeline {
         stage('SonarQube Scan') {
             when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
             steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    dir('app-source') {
-                        sh """
-                            sonar-scanner \
-                                -Dsonar.projectKey=techshop-app \
-                                -Dsonar.sources=frontend/src,backend/src \
-                                -Dsonar.host.url=http://sonarqube:9000 \
-                                -Dsonar.token=$SONAR_TOKEN \
-                                -Dsonar.qualitygate.wait=true \
-                                -Dsonar.exclusions=**/node_modules/**,**/*.test.ts,**/*.spec.ts \
-                                -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info 2>&1
-                        """
-                    }
+                dir('app-source') {
+                    sh """
+                        set -e
+                        sonar-scanner \\
+                            -Dsonar.projectKey=techshop-app \\
+                            -Dsonar.sources=frontend/src,backend/src \\
+                            -Dsonar.host.url=http://sonarqube:9000 \\
+                            -Dsonar.token=\$SONAR_TOKEN \\
+                            -Dsonar.qualitygate.wait=true \\
+                            -Dsonar.exclusions=**/node_modules/**,**/*.test.ts,**/*.spec.ts \\
+                            -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info 2>&1
+                    """
                 }
             }
         }
@@ -172,21 +274,16 @@ pipeline {
             when { expression { !params.SKIP_BUILD && !params.SKIP_BACKEND && env.BUILD_BACKEND != 'false' } }
             steps {
                 dir('app-source') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PAT')
-                    ]) {
-                        sh """
-                            echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
-                            docker build -f backend/Dockerfile \\
-                                -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV} \
-                                .
-                            docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV}
-                        """
-                    }
+                    sh """
+                        set -e
+                        echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
+                        docker build -f backend/Dockerfile \\
+                            -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                            -t ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV} \
+                            .
+                        docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                        docker push ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV}
+                    """
                 }
             }
         }
@@ -226,22 +323,17 @@ pipeline {
             when { expression { !params.SKIP_BUILD && !params.SKIP_FRONTEND && env.BUILD_FRONTEND != 'false' } }
             steps {
                 dir('app-source') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PAT'
-                    )]) {
-                        sh """
-                            echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
-                            docker build -f frontend/Dockerfile \\
-                                --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
-                                -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                                -t ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV} \
-                                .
-                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
-                            docker push ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV}
-                        """
-                    }
+                    sh """
+                        set -e
+                        echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
+                        docker build -f frontend/Dockerfile \\
+                            --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
+                            -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
+                            -t ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV} \
+                            .
+                        docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                        docker push ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV}
+                    """
                 }
             }
         }
@@ -278,7 +370,7 @@ pipeline {
         }
 
         // ── Ký image + SBOM + SLSA provenance (supply-chain security) ──────────
-        //   Cần credential: Secret text 'cosign-key' (nội dung private key) + env COSIGN_PASSWORD.
+        //   Private key lấy TRỰC TIẾP từ Vault (secret/ci/cosign) + env COSIGN_PASSWORD.
         //   Key được ghi ra file (printf giữ nguyên newline — env:// làm vỡ PEM block).
         //   Public key export ra cosign-public.pem → dùng cho Kyverno/OPA verify khi deploy.
         stage('Sign & Attest (Cosign + SLSA)') {
@@ -295,19 +387,19 @@ pipeline {
                             ],
                             metadata: [buildStartedOn: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))],
                             materials: [
-                                [uri: 'git+https://github.com/vinh25042005/techshop-app.git', digest: [sha1: env.GIT_COMMIT_SHORT]]
+                                [uri: 'git+https://github.com/vinh25042005/techshop-app.git', digest: [sha1: env.APP_COMMIT_FULL]]
                             ]
                         ]
                         writeFile file: 'slsa-provenance.json', text: groovy.json.JsonOutput.toJson(prov)
                     }
-                    withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        // ── Chuẩn hóa PEM bằng Groovy (tránh shell heredoc bị indent → syntax error) ──
-                        //   Jenkins Secret text có thể dồn key thành 1 dòng hoặc giữ '\n' literal
-                        //   → cosign báo "invalid pem block". Groovy tự rebuild PEM đúng chuẩn.
-                        script {
-                            // KHÔNG lưu Matcher vào biến (Matcher không serializable → NotSerializableException
-                            // khi Jenkins lưu trạng thái pipeline). Dùng inline [0][1] để lấy String ngay.
-                            def rawKey = COSIGN_PRIVATE_KEY.replace('\\n', '\n')  // literal \n → newline
+                    // ── Chuẩn hóa PEM bằng Groovy (tránh shell heredoc bị indent → syntax error) ──
+                    //   Key lấy TRỰC TIẾP từ Vault (secret/ci/cosign) — không qua Jenkins Credential.
+                    //   Jenkins Secret text có thể dồn key thành 1 dòng hoặc giữ '\n' literal
+                    //   → cosign báo "invalid pem block". Groovy tự rebuild PEM đúng chuẩn.
+                    script {
+                        // KHÔNG lưu Matcher vào biến (Matcher không serializable → NotSerializableException
+                        // khi Jenkins lưu trạng thái pipeline). Dùng inline [0][1] để lấy String ngay.
+                        def rawKey = env.COSIGN_PRIVATE_KEY.replace('\\n', '\n')  // literal \n → newline
                             def header = "-----BEGIN ${(rawKey =~ /-----BEGIN ([^-]+)-----/)[0][1]}-----"
                             def footer = "-----END ${(rawKey =~ /-----END ([^-]+)-----/)[0][1]}-----"
                             def body = rawKey
@@ -362,7 +454,6 @@ pipeline {
 
                             echo ">>> Sign & Attest hoàn tất"
                         """
-                    }
                 }
             }
             post {
@@ -376,13 +467,8 @@ pipeline {
             when { expression { env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false' } }
             steps {
                 dir('deploy-web') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'github-token',
-                        usernameVariable: 'GIT_USER',
-                        passwordVariable: 'GIT_PASS'
-                    )]) {
-                        script {
-                            def commitAuthor = sh(
+                    script {
+                        def commitAuthor = sh(
                                 script: 'cd ../app-source && git log -1 --format="%an <%ae>"',
                                 returnStdout: true
                             ).trim()
@@ -425,13 +511,16 @@ pipeline {
                                 git add ${argocdFile}
                                 git diff --cached --quiet && echo "No changes to commit" || {
                                     git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
-                                    git pull --rebase https://\$GIT_USER:\$GIT_PASS@github.com/vinh25042005/deploy-web.git week-6-argo-rollouts 2>/dev/null || true
-                                    git push https://\$GIT_USER:\$GIT_PASS@github.com/vinh25042005/deploy-web.git HEAD:week-6-argo-rollouts
+                                    # Token GitHub nạp từ Vault (secret/ci/github) qua git credential helper
+                                    # — không nhúng token vào URL/log
+                                    git remote set-url origin https://github.com/vinh25042005/deploy-web.git
+                                    # Pull ĐÚNG branch deploy (không phải origin/HEAD=main) + fail loud nếu conflict
+                                    git pull --rebase origin ${params.DEPLOY_BRANCH} || { echo 'ERROR: git pull --rebase thất bại (conflict?)'; exit 1; }
+                                    git push origin HEAD:${params.DEPLOY_BRANCH}
                                     echo "✅ Pushed tag ${IMAGE_TAG} to Git"
                                 }
                             """
                         }
-                    }
                 }
             }
         }
@@ -455,6 +544,8 @@ pipeline {
                     }
                 }
                 cleanWs()  // Xóa workspace giải phóng disk
+                // Dọn secret artifacts khỏi home Jenkins (git credential store + vault token)
+                sh 'rm -f ~/.git-credentials ~/.vault-token 2>/dev/null || true'
             }
         }
     }
