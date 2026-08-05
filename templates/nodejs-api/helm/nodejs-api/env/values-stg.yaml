@@ -1,3 +1,0 @@
-namespace: nodejs-api-stg
-ingress:
-  host: api-stg.example.com

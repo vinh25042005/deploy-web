@@ -1,3 +1,0 @@
-namespace: nodejs-api-dev
-ingress:
-  host: api-dev.example.com
