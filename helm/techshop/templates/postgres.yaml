@@ -22,6 +22,11 @@ spec:
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "techshop"
         vault.hashicorp.com/agent-inject-status: "update"
+        # Giảm resource mặc định 250m của vault-agent (sidecar + init) để tiết CPU cho cluster 2 vCPU
+        vault.hashicorp.com/agent-requests-cpu: "100m"
+        vault.hashicorp.com/agent-limits-cpu: "250m"
+        vault.hashicorp.com/agent-init-requests-cpu: "100m"
+        vault.hashicorp.com/agent-init-limits-cpu: "250m"
         vault.hashicorp.com/agent-inject-secret-postgres: "secret/data/postgres"
         vault.hashicorp.com/agent-inject-template-postgres: |
           export POSTGRES_PASSWORD={{"{{"}}- with secret "secret/data/postgres" }}{{"{{"}} .Data.data.password }}{{"{{"}}- end }}
