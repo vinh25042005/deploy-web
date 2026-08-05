@@ -160,6 +160,11 @@ kube-prometheus-stack:
       vault.hashicorp.com/agent-inject-template-grafana-admin-user: |
         {{"{{"}} with secret "secret/data/grafana" }}{{"{{"}} .Data.data.admin_username }}{{"{{"}} end }}
     env:
+      # GF_SECURITY_ADMIN_USER (plain) bắt buộc để chart BỎ QUA secretKeyRef
+      # tới secret <rel>-grafana (khi set PASSWORD__FILE thì chart không tạo secret này,
+      # nhưng vẫn inject USER từ secret → CreateContainerConfigError nếu thiếu).
+      # Giá trị "admin" trùng với admin_username trong Vault (single source of truth).
+      GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/grafana-admin-password
       GF_SECURITY_ADMIN_USER__FILE: /vault/secrets/grafana-admin-user
     service:
