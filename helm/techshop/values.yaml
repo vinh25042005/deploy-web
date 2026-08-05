@@ -156,17 +156,14 @@ kube-prometheus-stack:
       vault.hashicorp.com/agent-inject-secret-grafana-admin-password: "secret/data/grafana"
       vault.hashicorp.com/agent-inject-template-grafana-admin-password: |
         {{"{{"}} with secret "secret/data/grafana" }}{{"{{"}} .Data.data.admin_password }}{{"{{"}} end }}
-      vault.hashicorp.com/agent-inject-secret-grafana-admin-user: "secret/data/grafana"
-      vault.hashicorp.com/agent-inject-template-grafana-admin-user: |
-        {{"{{"}} with secret "secret/data/grafana" }}{{"{{"}} .Data.data.admin_username }}{{"{{"}} end }}
     env:
-      # GF_SECURITY_ADMIN_USER (plain) bắt buộc để chart BỎ QUA secretKeyRef
-      # tới secret <rel>-grafana (khi set PASSWORD__FILE thì chart không tạo secret này,
-      # nhưng vẫn inject USER từ secret → CreateContainerConfigError nếu thiếu).
-      # Giá trị "admin" trùng với admin_username trong Vault (single source of truth).
+      # GF_SECURITY_ADMIN_USER (plain, static "admin") bắt buộc để chart BỎ QUA
+      # secretKeyRef tới secret <rel>-grafana.
+      # ⚠️ KHÔNG set GF_SECURITY_ADMIN_USER__FILE song song: Grafana 11 coi 2 biến
+      # này là EXCLUSIVE → "Both ... are set (but are exclusive)" → CrashLoopBackOff.
+      # Mật khẩu nhạy cảm đọc TRỰC TIẾP từ Vault qua __FILE (Vault Agent Injector).
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/grafana-admin-password
-      GF_SECURITY_ADMIN_USER__FILE: /vault/secrets/grafana-admin-user
     service:
       type: ClusterIP
       port: 80
