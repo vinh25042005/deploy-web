@@ -244,6 +244,8 @@ resource "terraform_data" "wait_k8s_api" {
   provisioner "local-exec" {
     command = <<-EOT
       echo ">>> Waiting for K8s API server..."
+      # Ép kubectl dùng đúng config mới ghi, KHÔNG phụ thuộc biến môi trường KUBECONFIG
+      export KUBECONFIG="$HOME/.kube/config"
       for i in $(seq 1 30); do
         # Tải kubeconfig mới từ SSM (Ansible upload lên sau khi init cluster)
         SSM_KUBECONFIG=$(aws ssm get-parameter --name "/k8s/kubeconfig" \
@@ -251,14 +253,17 @@ resource "terraform_data" "wait_k8s_api" {
           --query Parameter.Value --output text 2>/dev/null || echo "")
         
         if [ -n "$SSM_KUBECONFIG" ]; then
-          echo "$SSM_KUBECONFIG" | base64 -d | gunzip > ~/.kube/config 2>/dev/null || true
-          chmod 600 ~/.kube/config
+          echo "$SSM_KUBECONFIG" | base64 -d | gunzip > "$HOME/.kube/config" 2>/dev/null || true
+          chmod 600 "$HOME/.kube/config"
           
-          # Thử kết nối API server
-          if kubectl get nodes --request-timeout=5s 2>/dev/null; then
+          # Thử kết nối API server (bỏ 2>/dev/null để hiện lỗi thật khi fail)
+          if kubectl get nodes --request-timeout=5s; then
             echo ">>> K8s API server ready!"
             exit 0
           fi
+          echo "    (kubectl chưa kết nối được API server)"
+        else
+          echo "    (SSM param /k8s/kubeconfig trống hoặc không đọc được)"
         fi
         echo "    retry $i/30 - waiting for API server..."
         sleep 10
@@ -379,7 +384,8 @@ resource "terraform_data" "vault_init" {
   depends_on = [helm_release.vault, terraform_data.vault_storageclass]
 
   provisioner "local-exec" {
-    command = "${path.module}/vault-init.sh ${var.region}"
+    # Gọi bằng `bash` để không phụ thuộc exec bit (script 644 vẫn chạy được)
+    command = "bash ${path.module}/vault-init.sh ${var.region}"
   }
 }
 
