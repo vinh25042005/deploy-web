@@ -42,6 +42,12 @@ variable "ingress_count" {
   description = "Số EC2 ingress nodes (giảm còn 1 để tiết kiệm chi phí — mất HA, chấp nhận được cho lab)"
 }
 
+variable "vault_addr" {
+  type        = string
+  default     = "https://52.221.18.86:8200"
+  description = "Vault standalone address (injector externalVaultAddr + CI/backup VAULT_ADDR)"
+}
+
 variable "frontend_port" {
   type        = number
   default     = 3000

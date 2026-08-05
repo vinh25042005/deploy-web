@@ -42,6 +42,9 @@ postgres:
     schedule: "0 */6 * * *"           # 6 giờ 1 lần
     s3Bucket: techshop-loki-790400775134
     s3Region: ap-southeast-1
+    # ── Vault standalone VM (backup đọc password trực tiếp từ Vault) ──
+    vaultAddr: https://52.221.18.86:8200     # ← Vault VM EIP
+    vaultCaConfigMap: ""                  # ← ConfigMap chứa ca.crt (VD: vault-ca) để trust TLS self-signed
 
 config:
   nodeEnv: production
@@ -145,6 +148,7 @@ kube-prometheus-stack:
       vault.hashicorp.com/agent-inject: "true"
       vault.hashicorp.com/role: "techshop"
       vault.hashicorp.com/agent-inject-status: "update"
+      vault.hashicorp.com/tls-skip-verify: "true"
       vault.hashicorp.com/agent-requests-cpu: "100m"
       vault.hashicorp.com/agent-limits-cpu: "250m"
       vault.hashicorp.com/agent-init-requests-cpu: "100m"

@@ -13,14 +13,17 @@ pipeline {
         booleanParam(name: 'SKIP_FRONTEND', defaultValue: false, description: 'Skip frontend (chỉ build backend)')
         booleanParam(name: 'BUILD_FULL', defaultValue: false, description: 'Build full — bỏ qua detect thay đổi, build cả backend + frontend')
         string(name: 'DEPLOY_BRANCH', defaultValue: 'week-6-argo-rollouts', description: 'Branch deploy-web mà ArgoCD đang track (argocd/root.yaml targetRevision)')
+        string(name: 'VAULT_EIP', defaultValue: '52.221.18.86', description: 'Vault VM Elastic IP — VAULT_ADDR=https://<EIP>:8200 (bắt buộc khi dùng Vault standalone)')
     }
 
     environment {
         REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
 
-        // Vault — CI đọc secret TRỰC TIẾP từ Vault (port-forward local), không qua ESO → k8s
-        VAULT_ADDR = 'http://127.0.0.1:8200'
+        // Vault — CI đọc secret TRỰC TIẾP từ Vault VM (https://<VAULT_EIP>:8200)
+        // Operator phải copy CA self-signed vào /var/jenkins_home/vault-ca.crt
+        VAULT_ADDR   = "https://${params.VAULT_EIP}:8200"
+        VAULT_CACERT = '/var/jenkins_home/vault-ca.crt'
 
         // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
@@ -49,30 +52,32 @@ pipeline {
             }
         }
 
-        // ── Lấy secret TRỰC TIẾP từ Vault (KHÔNG qua ESO → k8s) ────────────────
-        //   Jenkins (standalone EC2, ngoài cluster) truy cập Vault bằng Kubernetes auth:
-        //     1. kubectl port-forward svc/vault → reach Vault in-cluster (không lộ Vault ra ngoài)
-        //     2. kubectl create token jenkins-ci (SA do Helm chart / ArgoCD quản lý)
-        //     3. vault login -method=kubernetes role=techshop-jenkins (least-privilege, ttl 1h)
+        // ── Lấy secret TRỰC TIẾP từ Vault VM (KHÔNG qua ESO → k8s) ─────────────
+        //   Jenkins (EC2 riêng) gọi thẳng Vault VM qua TLS:
+        //     1. vault status → kiểm tra reachable (VAULT_ADDR=https://<VAULT_EIP>:8200)
+        //     2. kubectl create token jenkins-ci → vault login -method=kubernetes role=techshop-jenkins
         //   Chỉ fetch ĐÚNG các secret pipeline dùng (CI credentials) — least privilege,
-        //   ít điểm lỗi: secret thiếu → fail ngay tại đây, không đọc thừa.
+        //   ít điểm lỗi: secret thiếu → fail ngay tại đây.
         stage('Fetch Secrets from Vault') {
             steps {
                 script {
-                    // 1) Port-forward tới Vault (chạy nền — đóng ở post.always)
-                    sh 'nohup kubectl -n vault port-forward svc/vault 8200:8200 >/tmp/vault-pf.log 2>&1 &'
+                    // 0) Bắt buộc có VAULT_EIP
+                    if (!params.VAULT_EIP) {
+                        error 'Thiếu tham số VAULT_EIP (Elastic IP của Vault VM) — điền khi Build with Parameters.'
+                    }
+                    // 1) Kiểm tra Vault reachable (trực tiếp qua VM — không port-forward)
                     sh """
                         READY=0
-                        for i in \$(seq 1 20); do
+                        for i in \$(seq 1 15); do
                             if vault status -format=json >/dev/null 2>&1; then
                                 READY=1
-                                echo '>>> Vault reachable via port-forward'
+                                echo '>>> Vault reachable'
                                 break
                             fi
                             echo "  waiting Vault... \$i"
                             sleep 2
                         done
-                        [ "\$READY" = "1" ] || { echo 'ERROR: không reach được Vault (xem /tmp/vault-pf.log)'; exit 1; }
+                        [ "\$READY" = "1" ] || { echo 'ERROR: không reach được Vault (kiểm tra VAULT_ADDR / SG / CA)'; exit 1; }
                     """
 
                     // 2) Kubernetes auth — JWT của SA jenkins-ci (không in ra log)
@@ -98,11 +103,6 @@ pipeline {
                         git config --global credential.helper store
                     """
                     echo '>>> Đã nạp secret từ Vault (không in giá trị ra log)'
-                }
-            }
-            post {
-                always {
-                    sh 'pkill -f "port-forward svc/vault" || true'
                 }
             }
         }

@@ -293,9 +293,11 @@ resource "helm_release" "ebs_csi_driver" {
   ]
 }
 
-# ── Vault (HashiCorp) — quản lý secret tập trung ──
+# ── Vault Agent Injector (Vault standalone — server đã đưa ra VM riêng) ──
+#   Chỉ giữ injector: webhook inject agent sidecar + vault-agent-init vào pod.
+#   Server đã chuyển sang VM standalone: https://52.221.18.86:8200
 resource "helm_release" "vault" {
-  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api, helm_release.ebs_csi_driver]
+  depends_on = [null_resource.ansible, terraform_data.wait_k8s_api]
 
   name       = "vault"
   namespace  = "vault"
@@ -305,54 +307,13 @@ resource "helm_release" "vault" {
   create_namespace = true
   wait             = false
 
-  # Standalone mode — 1 pod, đủ dùng cho project
   values = [
     <<-YAML
     server:
-      dev:
-        enabled: false
-      ha:
-        enabled: false
-      standalone:
-        enabled: true
-        config: |
-          ui = true
-          disable_mlock = true
-
-          storage "file" {
-            path = "/vault/data"
-          }
-
-          listener "tcp" {
-            address         = "[::]:8200"
-            cluster_address = "[::]:8201"
-            tls_disable     = true
-          }
-
-          seal "awskms" {
-            region     = "ap-southeast-1"
-            kms_key_id = "5f9e342a-d45d-4a93-9841-0398fe67b7da"
-          }
-      resources:
-        requests:
-          memory: "256Mi"
-          cpu: "100m"
-        limits:
-          memory: "512Mi"
-          cpu: "200m"
-      tolerations: []
-      dataStorage:
-        enabled: true
-        size: 10Gi
-        storageClass: techshop-ssm-waitforfirstconsumer
-        accessMode: ReadWriteOnce
-      readinessProbe:
-        initialDelaySeconds: 5
-        timeoutSeconds: 10
-        periodSeconds: 10
-        failureThreshold: 6
+      enabled: false
     injector:
       enabled: true
+      externalVaultAddr: "${var.vault_addr}"
     YAML
   ]
 }
@@ -376,16 +337,6 @@ resource "terraform_data" "vault_storageclass" {
         encrypted: "true"
       EOF
     EOT
-  }
-}
-
-# ── Vault init (chạy 1 lần sau khi Vault pod ready) ──
-resource "terraform_data" "vault_init" {
-  depends_on = [helm_release.vault, terraform_data.vault_storageclass]
-
-  provisioner "local-exec" {
-    # Gọi bằng `bash` để không phụ thuộc exec bit (script 644 vẫn chạy được)
-    command = "bash ${path.module}/vault-init.sh ${var.region}"
   }
 }
 
@@ -480,10 +431,13 @@ resource "terraform_data" "update_argocd_branch" {
 # nên không kết nối được. Resource này gọi configure-vault-db.sh: chờ postgres
 # lên rồi ghi DB config. Nếu postgres không lên trong DB_WAIT_SECONDS (mặc định
 # 600s) → fail để lần apply sau tự retry (terraform re-run provisioner).
-resource "terraform_data" "configure_vault_db" {
-  depends_on = [terraform_data.vault_init, terraform_data.update_argocd_branch]
-
-  provisioner "local-exec" {
-    command = "bash ${path.module}/configure-vault-db.sh ${var.region}"
-  }
-}
+# ── [TẠM DISABLE] Configure Dynamic Database Secrets ──
+#   Script cũ dùng kubectl exec vault-0 (in-cluster) — cần cập nhật sang external Vault.
+#   Dynamic DB secrets không chặn CI/app. Làm sau khi có vault CLI trên host terraform.
+# resource "terraform_data" "configure_vault_db" {
+#   depends_on = [terraform_data.update_argocd_branch]
+#
+#   provisioner "local-exec" {
+#     command = "bash ${path.module}/configure-vault-db.sh ${var.region}"
+#   }
+# }

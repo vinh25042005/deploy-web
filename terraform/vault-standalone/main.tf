@@ -108,7 +108,7 @@ resource "aws_iam_role_policy" "vault_kms_seal" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"]
+        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
         Resource = "arn:aws:kms:${var.region}:*:key/${var.kms_key_id}"
       },
       {

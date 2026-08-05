@@ -23,6 +23,7 @@ spec:
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "techshop"
         vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/tls-skip-verify: "true"
         # Giảm resource mặc định của vault-agent (cluster 2 vCPU)
         vault.hashicorp.com/agent-requests-cpu: "100m"
         vault.hashicorp.com/agent-limits-cpu: "250m"

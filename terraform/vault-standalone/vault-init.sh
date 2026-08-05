@@ -8,7 +8,7 @@ set -euxo pipefail
 
 # ── Cài Vault binary ──
 apt-get update -qq
-apt-get install -y -qq unzip openssl jq curl >/dev/null 2>&1
+apt-get install -y -qq unzip openssl jq curl awscli >/dev/null 2>&1
 cd /tmp
 curl -fsSL "https://releases.hashicorp.com/vault/${vault_version}/vault_${vault_version}_linux_amd64.zip" -o vault.zip
 unzip -o vault.zip -d /usr/local/bin >/dev/null
@@ -22,7 +22,7 @@ openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 \
   -subj "/CN=vault-ca" -out ca.crt
 openssl genrsa -out server.key 2048 2>/dev/null
 openssl req -new -key server.key -subj "/CN=${vault_hostname}" -out server.csr
-printf "subjectAltName=DNS:${vault_hostname},IP:${vault_eip}\n" > san.cnf
+printf "subjectAltName=DNS:${vault_hostname},IP:${vault_eip},IP:127.0.0.1\n" > san.cnf
 openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
   -days 3650 -sha256 -extfile san.cnf -out server.crt
 chmod 644 ca.crt server.crt
