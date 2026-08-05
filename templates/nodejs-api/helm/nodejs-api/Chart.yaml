@@ -1,0 +1,9 @@
+# Golden path — chart nhẹ per-service.
+# Khi tạo service mới từ template: đổi `name` thành tên service
+# (vd: orders-api) và đổi tên thư mục helm/nodejs-api → helm/orders-api.
+apiVersion: v2
+name: nodejs-api
+description: Golden path — Node.js API service (IDP template)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

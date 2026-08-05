@@ -1,0 +1,88 @@
+{{- $fullname := include "nodejs-api.fullname" . -}}
+{{- $name := include "nodejs-api.name" . -}}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ $fullname }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: http
+          env:
+            - name: SERVICE_NAME
+              value: {{ $name }}
+            - name: PORT
+              value: "{{ .Values.service.port }}"
+            - name: VERSION
+              value: {{ .Chart.AppVersion | quote }}
+            - name: COMMIT
+              value: {{ .Values.image.tag | quote }}
+            # Mốc thời gian render — dùng cho lead time trên dashboard DORA
+            - name: BUILT_AT
+              value: "{{ now | unixEpoch }}"
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-config
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+  strategy:
+    canary:
+      canaryService: {{ $fullname }}-canary
+      stableService: {{ $fullname }}
+      trafficRouting:
+        nginx:
+          stableIngress: {{ $fullname }}
+      steps:
+        {{- $svcArg := printf "%s-%s-canary-%d" .Values.namespace $name (int .Values.service.port) }}
+        - setWeight: 10
+        - pause: { duration: 5m }
+        {{- if .Values.rollout.analysis.enabled }}
+        - analysis:
+            templates:
+              - templateName: success-rate
+            args:
+              - name: service
+                value: {{ $svcArg | quote }}
+        {{- end }}
+        - setWeight: 50
+        - pause: { duration: 5m }
+        {{- if .Values.rollout.analysis.enabled }}
+        - analysis:
+            templates:
+              - templateName: success-rate
+            args:
+              - name: service
+                value: {{ $svcArg | quote }}
+        {{- end }}
+        - setWeight: 100

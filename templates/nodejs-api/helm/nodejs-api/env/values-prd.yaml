@@ -1,0 +1,7 @@
+namespace: nodejs-api-prd
+ingress:
+  host: api.example.com
+replicas: 3
+hpa:
+  minReplicas: 3
+  maxReplicas: 10

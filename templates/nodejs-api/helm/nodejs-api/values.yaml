@@ -1,0 +1,54 @@
+# ─── Cấu hình chung ──────────────────────────────────────────────
+namespace: nodejs-api-dev      # ghi đè theo env (values-dev/stg/prd)
+nameOverride: ""
+fullnameOverride: ""
+
+replicas: 2
+
+image:
+  repository: ghcr.io/OWNER/SERVICE   # TODO: sửa thành registry thật khi tạo service
+  tag: latest                         # IMAGE_TAG_ANCHOR — CI tự cập nhật dòng này
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  port: 8080
+
+ingress:
+  enabled: true
+  host: api-dev.example.com            # TODO: host thật
+  annotations: {}
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# ─── Chiến lược rollout (golden path: canary + metrics gate) ─────
+rollout:
+  strategy: canary              # canary (khuyến nghị) | blueGreen
+  analysis:
+    enabled: true
+    prometheus: "http://kube-prometheus-stack-prometheus.monitoring:9090"
+    successRate:
+      interval: 1m
+      count: 3
+      failureLimit: 2
+      min: 0.99                  # tỉ lệ 2xx/3xx tối thiểu để promote
+  steps:                        # 10% → 50% → 100% (có pause + analysis)
+    - setWeight: 10
+    - pause: { duration: 5m }
+    - setWeight: 50
+    - pause: { duration: 5m }
+    - setWeight: 100

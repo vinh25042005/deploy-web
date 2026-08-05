@@ -1,0 +1,29 @@
+{{- $fullname := include "nodejs-api.fullname" . -}}
+{{- $name := include "nodejs-api.name" . -}}
+# Stable service — Rollout controller + nginx ingress quản lý trọng số canary
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      name: http
+---
+# Canary service — để Argo Rollouts tách traffic khi setWeight < 100
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-canary
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      name: http

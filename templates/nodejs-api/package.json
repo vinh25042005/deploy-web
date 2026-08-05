@@ -1,0 +1,19 @@
+{
+  "name": "nodejs-api",
+  "version": "0.1.0",
+  "description": "Golden path template - Node.js API (IDP)",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "prom-client": "^15.1.3"
+  }
+}
