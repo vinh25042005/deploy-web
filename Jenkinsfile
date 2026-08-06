@@ -400,8 +400,7 @@ pipeline {
 
                             cosign version 2>&1 | head -1
 
-                            # Export public key cho verify ở cluster (ArgoCD admission / Kyverno)
-                            cosign public-key --key cosign.key > cosign-public.pem
+                            
                             echo ">>> SLSA provenance:"
                             cat slsa-provenance.json
 
