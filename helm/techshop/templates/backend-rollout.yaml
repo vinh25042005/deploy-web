@@ -34,10 +34,10 @@ spec:
         vault.hashicorp.com/agent-limits-cpu: "250m"
         vault.hashicorp.com/agent-init-requests-cpu: "100m"
         vault.hashicorp.com/agent-init-limits-cpu: "250m"
-        vault.hashicorp.com/agent-inject-secret-backend-env: "secret/data/database"
+        vault.hashicorp.com/agent-inject-secret-backend-env: "secret/data/postgres"
         vault.hashicorp.com/agent-inject-template-backend-env: |
-          {{"{{"}} with secret "secret/data/database" }}
-          export DATABASE_URL='{{"{{"}} .Data.data.url }}'
+          {{"{{"}} with secret "secret/data/postgres" }}
+          export DATABASE_URL='postgresql://postgres:{{"{{"}} .Data.data.password }}@postgres:5432/shopdb?schema=public'
           {{"{{"}} end }}
           {{"{{"}} with secret "secret/data/jwt" }}
           export JWT_SECRET='{{"{{"}} .Data.data.secret }}'

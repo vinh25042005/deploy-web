@@ -14,6 +14,7 @@ pipeline {
         booleanParam(name: 'BUILD_FULL', defaultValue: false, description: 'Build full — bỏ qua detect thay đổi, build cả backend + frontend')
         string(name: 'DEPLOY_BRANCH', defaultValue: 'week-6-argo-rollouts', description: 'Branch deploy-web mà ArgoCD đang track (argocd/root.yaml targetRevision)')
         string(name: 'VAULT_EIP', defaultValue: '52.221.18.86', description: 'Vault VM Elastic IP — VAULT_ADDR=https://<EIP>:8200 (bắt buộc khi dùng Vault standalone)')
+        booleanParam(name: 'ROTATE_DB_PASSWORD', defaultValue: false, description: 'Rotate postgres password theo secret/postgres trong Vault (ALTER DB + restart backend)')
     }
 
     environment {
@@ -32,6 +33,8 @@ pipeline {
         SONAR_TOKEN   = vault path: 'secret/ci/sonar', key: 'token'
         COSIGN_PRIVATE_KEY = vault path: 'secret/ci/cosign', key: 'private_key'
         COSIGN_PUBLIC_KEY  = vault path: 'secret/cosign', key: 'public_key'
+        // Password postgres — 1 nguồn chân lý duy nhất (postgres init + backend DATABASE_URL)
+        DB_PASSWORD = vault path: 'secret/postgres', key: 'password'
 
         // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
@@ -77,7 +80,8 @@ pipeline {
                         'DOCKER_PAT': env.DOCKER_PAT,
                         'SONAR_TOKEN': env.SONAR_TOKEN,
                         'COSIGN_PRIVATE_KEY': env.COSIGN_PRIVATE_KEY,
-                        'COSIGN_PUBLIC_KEY': env.COSIGN_PUBLIC_KEY
+                        'COSIGN_PUBLIC_KEY': env.COSIGN_PUBLIC_KEY,
+                        'DB_PASSWORD': env.DB_PASSWORD
                     ]
                     secrets.each { k, v ->
                         if (!v || v.trim().isEmpty()) {
@@ -96,7 +100,36 @@ pipeline {
                 }
             }
         }
-
+        // ── Rotate postgres password (theo secret/postgres trong Vault) ──────
+        //   Cách dùng: 1) đổi password trong Vault (vault kv patch secret/postgres password=<mới>)
+        //              2) chạy build này với ROTATE_DB_PASSWORD=true
+        //   → CI đọc pass MỚI từ Vault → ALTER user postgres trong DB
+        //     → restart backend (pod mới source secret mới, DATABASE_URL tự ghép từ secret/postgres)
+        //   LƯU Ý: password KHÔNG được chứa ký tự ' (sẽ phá vỡ lệnh ALTER).
+        stage('Rotate DB Password') {
+            when { expression { params.ROTATE_DB_PASSWORD } }
+            steps {
+                script {
+                    // 1) Đổi password THẬT trong postgres (exec qua socket local — không cần pass cũ)
+                    sh """
+                        set -e
+                        echo "ALTER USER postgres WITH PASSWORD '${DB_PASSWORD}';" | \\
+                          kubectl exec -i -n techshop-stg pod/postgres-0 -- psql -U postgres -d shopdb
+                        echo '>>> Đã ALTER password postgres trong DB'
+                    """
+                    // 2) Restart backend — pod mới source secret mới từ Vault (DATABASE_URL tự ghép)
+                    script {
+                        def restartAt = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+                        sh "kubectl -n techshop-stg patch rollout backend --type merge -p '{\"spec\":{\"restartAt\":\"${restartAt}\"}}'"
+                    }
+                    // 3) Chờ + verify backend không CrashLoop
+                    sh """
+                        sleep 25
+                        kubectl get pods -n techshop-stg -l app=backend
+                    """
+                }
+            }
+        }
         // ── Reconcile k8s Secret phái sinh TỪ Vault (thay ESO, không qua ESO) ──
         //   - dockerhub-secret (imagePullSecret) ← secret/ci/dockerhub
         //   - cosign-pub (Kyverno verify image) ← secret/cosign (public key)
