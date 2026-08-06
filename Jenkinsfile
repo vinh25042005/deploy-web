@@ -68,10 +68,20 @@ pipeline {
             steps {
                 script {
                     // 0) Fail sớm nếu Vault/AppRole lỗi → secret rỗng
-                    ['GITHUB_TOKEN','GITHUB_USER','DOCKER_USER','DOCKER_PAT',
-                     'SONAR_TOKEN','COSIGN_PRIVATE_KEY','COSIGN_PUBLIC_KEY'].each { v ->
-                        if (!env[v] || env[v].trim().isEmpty()) {
-                            error "Thiếu secret '${v}' từ Vault — kiểm tra AppRole credential & Vault reachable."
+                    //    LƯU Ý sandbox: env[var] (getAt động) bị script-security chặn
+                    //    → resolve bằng env.VAR tĩnh trước, rồi mới vòng lặp kiểm tra.
+                    def secrets = [
+                        'GITHUB_TOKEN': env.GITHUB_TOKEN,
+                        'GITHUB_USER': env.GITHUB_USER,
+                        'DOCKER_USER': env.DOCKER_USER,
+                        'DOCKER_PAT': env.DOCKER_PAT,
+                        'SONAR_TOKEN': env.SONAR_TOKEN,
+                        'COSIGN_PRIVATE_KEY': env.COSIGN_PRIVATE_KEY,
+                        'COSIGN_PUBLIC_KEY': env.COSIGN_PUBLIC_KEY
+                    ]
+                    secrets.each { k, v ->
+                        if (!v || v.trim().isEmpty()) {
+                            error "Thiếu secret '${k}' từ Vault — kiểm tra AppRole credential & Vault reachable."
                         }
                     }
                     echo '>>> Đã nạp secret từ Vault (HashiCorp Vault Plugin / AppRole) — không in giá trị'
