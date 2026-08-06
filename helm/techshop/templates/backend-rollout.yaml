@@ -24,6 +24,11 @@ spec:
         vault.hashicorp.com/role: "techshop"
         vault.hashicorp.com/agent-inject-status: "update"
         vault.hashicorp.com/tls-skip-verify: "true"
+        # ⚠️ BẮT BUỘC: vault-agent-init phải chạy ĐẦU TIÊN (mặc định injector nối
+        # init container vào CUỐI danh sách). prisma-migrate source
+        # /vault/secrets/backend-env → nếu không có annotation này, secrets chưa
+        # tồn tại khi prisma-migrate chạy → Init:Error "can't open ... No such file".
+        vault.hashicorp.com/agent-init-first: "true"
         # Giảm resource mặc định của vault-agent (cluster 2 vCPU)
         vault.hashicorp.com/agent-requests-cpu: "100m"
         vault.hashicorp.com/agent-limits-cpu: "250m"
