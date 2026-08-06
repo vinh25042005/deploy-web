@@ -20,10 +20,18 @@ pipeline {
         REGISTRY_BASE = 'docker.io/vinh2504'
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
 
-        // Vault — CI đọc secret TRỰC TIẾP từ Vault VM (https://<VAULT_EIP>:8200)
-        // Operator phải copy CA self-signed vào /var/jenkins_home/vault-ca.crt
-        VAULT_ADDR   = "https://${params.VAULT_EIP}:8200"
-        VAULT_CACERT = '/var/jenkins_home/vault-ca.crt'
+        // Vault — CI đọc secret TRỰC TIẾP từ Vault VM qua HashiCorp Vault Plugin
+        //   (hashicorp-vault-plugin + hashicorp-vault-pipeline, credential AppRole:
+        //    vault-approle-jenkins. URL/engine/skipSSL đã cấu hình ở Jenkins global config.)
+        //   Plugin tự login AppRole + renew; secret được mask, không in ra log.
+        VAULT_ADDR = "https://${params.VAULT_EIP}:8200"
+        GITHUB_TOKEN  = vault path: 'secret/ci/github', key: 'token'
+        GITHUB_USER   = vault path: 'secret/ci/github', key: 'username'
+        DOCKER_USER   = vault path: 'secret/ci/dockerhub', key: 'username'
+        DOCKER_PAT    = vault path: 'secret/ci/dockerhub', key: 'token'
+        SONAR_TOKEN   = vault path: 'secret/ci/sonar', key: 'token'
+        COSIGN_PRIVATE_KEY = vault path: 'secret/ci/cosign', key: 'private_key'
+        COSIGN_PUBLIC_KEY  = vault path: 'secret/cosign', key: 'public_key'
 
         // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
         APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
@@ -52,57 +60,29 @@ pipeline {
             }
         }
 
-        // ── Lấy secret TRỰC TIẾP từ Vault VM (KHÔNG qua ESO → k8s) ─────────────
-        //   Jenkins (EC2 riêng) gọi thẳng Vault VM qua TLS:
-        //     1. vault status → kiểm tra reachable (VAULT_ADDR=https://<VAULT_EIP>:8200)
-        //     2. kubectl create token jenkins-ci → vault login -method=kubernetes role=techshop-jenkins
-        //   Chỉ fetch ĐÚNG các secret pipeline dùng (CI credentials) — least privilege,
-        //   ít điểm lỗi: secret thiếu → fail ngay tại đây.
+        // ── Secret đã được nạp TỰ ĐỘNG qua HashiCorp Vault Plugin (environment) ──
+        //   Jenkins đọc TRỰC TIẾP từ Vault (không qua ESO/k8s) bằng AppRole credential
+        //   `vault-approle-jenkins` (Vault role: jenkins, policy: techshop-ci).
+        //   Stage này chỉ: kiểm tra secret đã load + cấu hình git credential helper.
         stage('Fetch Secrets from Vault') {
             steps {
                 script {
-                    // 0) Bắt buộc có VAULT_EIP
-                    if (!params.VAULT_EIP) {
-                        error 'Thiếu tham số VAULT_EIP (Elastic IP của Vault VM) — điền khi Build with Parameters.'
+                    // 0) Fail sớm nếu Vault/AppRole lỗi → secret rỗng
+                    ['GITHUB_TOKEN','GITHUB_USER','DOCKER_USER','DOCKER_PAT',
+                     'SONAR_TOKEN','COSIGN_PRIVATE_KEY','COSIGN_PUBLIC_KEY'].each { v ->
+                        if (!env[v] || env[v].trim().isEmpty()) {
+                            error "Thiếu secret '${v}' từ Vault — kiểm tra AppRole credential & Vault reachable."
+                        }
                     }
-                    // 1) Kiểm tra Vault reachable (trực tiếp qua VM — không port-forward)
-                    sh """
-                        READY=0
-                        for i in \$(seq 1 15); do
-                            if vault status -format=json >/dev/null 2>&1; then
-                                READY=1
-                                echo '>>> Vault reachable'
-                                break
-                            fi
-                            echo "  waiting Vault... \$i"
-                            sleep 2
-                        done
-                        [ "\$READY" = "1" ] || { echo 'ERROR: không reach được Vault (kiểm tra VAULT_ADDR / SG / CA)'; exit 1; }
-                    """
+                    echo '>>> Đã nạp secret từ Vault (HashiCorp Vault Plugin / AppRole) — không in giá trị'
 
-                    // 2) Kubernetes auth — JWT của SA jenkins-ci (không in ra log)
-                    env.VAULT_JWT = sh(
-                        script: 'kubectl create token jenkins-ci -n techshop-dev --audience=vault',
-                        returnStdout: true
-                    ).trim()
-                    sh 'vault login -method=kubernetes role=techshop-jenkins jwt="$VAULT_JWT" >/dev/null'
-
-                    // 3) Nhóm CI credentials — đọc trực tiếp từ Vault
-                    env.GITHUB_TOKEN  = sh(script: 'vault kv get -field=token secret/ci/github', returnStdout: true).trim()
-                    env.DOCKER_USER   = sh(script: 'vault kv get -field=username secret/ci/dockerhub', returnStdout: true).trim()
-                    env.DOCKER_PAT    = sh(script: 'vault kv get -field=token secret/ci/dockerhub', returnStdout: true).trim()
-                    env.SONAR_TOKEN   = sh(script: 'vault kv get -field=token secret/ci/sonar', returnStdout: true).trim()
-                    env.COSIGN_PRIVATE_KEY = sh(script: 'vault kv get -field=private_key secret/ci/cosign', returnStdout: true).trim()
-                    env.COSIGN_PUBLIC_KEY  = sh(script: 'vault kv get -field=public_key secret/cosign', returnStdout: true).trim()
-
-                    // 4) Git credential helper — dùng cho clone app + push deploy repo
+                    // Git credential helper — dùng cho clone app + push deploy repo
                     //    (tránh nhúng token vào URL/log)
                     sh """
                         printf 'https://x-access-token:%s@github.com\\n' "\$GITHUB_TOKEN" > ~/.git-credentials
                         chmod 600 ~/.git-credentials
                         git config --global credential.helper store
                     """
-                    echo '>>> Đã nạp secret từ Vault (không in giá trị ra log)'
                 }
             }
         }

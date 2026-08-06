@@ -136,10 +136,29 @@ kubectl patch application techshop-stg -n argocd --type merge \
 - `vault-init.sh` [9b]: chỉ thử nhanh 1 lần (không retry 180s vì postgres chưa bao giờ tồn tại lúc apply) — nếu chưa được thì bỏ qua, để `configure_vault_db` xử lý.
 - Nếu postgres không lên sau 600s → resource fail → lần `terraform apply` sau tự retry.
 
+## 14. Vault k8s auth 403 (token_reviewer_jwt hết hạn) + least-privilege CI + AppRole cho Jenkins
+
+**Lỗi**: Mọi k8s auth login MỚI tới Vault bị `403 permission denied` (curl + vault CLI đều fail), dù token pod hợp lệ & role binding đúng. Pod cũ vẫn chạy (token 24h còn renew), nhưng pod restart / CI build mới → chết.
+
+**Nguyên nhân**: `auth/kubernetes/config` có `token_reviewer_jwt_set=true` nhưng `token_reviewer_jwt` là projected SA token ~1h → hết hạn → Vault gọi TokenReview fail → 403 (Vault cố tình giấu lý do). Trùng failure mode mục #9 (bản in-cluster cũ).
+
+**Fix (script tái lập: `terraform/vault-standalone/fix-vault-k8s-auth.sh`)**:
+1. SA `vault-auth` (ns vault) + ClusterRoleBinding `system:auth-delegator` + **legacy token Secret non-expiring** → ghi lại `auth/kubernetes/config` (kubernetes_host + CA từ kubeconfig) làm `token_reviewer_jwt`.
+2. **Least-privilege CI**: policy `techshop-ci` (chỉ `secret/data/ci/*` + cosign) tách khỏi policy `techshop` (app: postgres/jwt/grafana/database). Role `techshop-jenkins` → `techshop-ci`. → Pod app bị chiếm KHÔNG đọc được CI credentials.
+3. **AppRole cho Jenkins** (Hashicorp Vault Plugin): role `jenkins` (policy `techshop-ci`), role_id/secret_id lưu SSM `/techshop/jenkins-approle-*`.
+4. **Audit log** file: `/opt/vault/audit/audit.log`.
+
+**Phía Jenkins** (đã làm):
+- Cài `hashicorp-vault-plugin` + `hashicorp-vault-pipeline`; credential AppRole `vault-approle-jenkins`; global config vaultUrl/engineVersion.
+- **Import CA Vault vào JVM truststore container** (bắt buộc — `skipSslVerification` global KHÔNG áp dụng cho AppRole login do bug mergeWithParent): `keytool -importcert -alias vault-ca` vào `/opt/java/openjdk/lib/security/cacerts` + restart Jenkins.
+- `Jenkinsfile`: `environment { GITHUB_TOKEN = vault path: 'secret/ci/github', key: 'token' ... }` (plugin tự auth+mask). **GOTCHA kv-v2**: path KHÔNG chứa `/data/` (plugin tự thêm) — viết `secret/data/ci/github` → thành `secret/data/data/ci/github` → 403.
+
 ## Files đã sửa
 
 | File | Thay đổi |
 |---|---|
+| `terraform/vault-standalone/fix-vault-k8s-auth.sh` | (mới) tái lập: SA vault-auth, refresh k8s config, policies, AppRole, audit, test |
+| `Jenkinsfile` | Đọc secret qua HashiCorp Vault Plugin (`vault path:` + AppRole), bỏ vault CLI/kubectl create token |
 | `terraform/live/main.tf` | Thêm `wait = false` cho vault & external_secrets, bỏ nodeSelector, sửa apply_manifests chờ webhook, thêm helm_release.ebs_csi_driver, sửa set syntax, thêm `seal "awskms"` |
 | `terraform/modules/compute/main.tf` | Thêm `ec2:DescribeAvailabilityZones`, `ec2:DescribeSnapshots`, `kms:*` vào IAM policy |
 | `ansible/roles/common/tasks/main.yml` | Thêm task kill unattended-upgrades + xoá apt locks |
