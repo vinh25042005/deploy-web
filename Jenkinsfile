@@ -661,7 +661,7 @@ pipeline {
         //   MẶC ĐỊNH TẮT — bật bằng "deploy" trong ENABLED_STAGES.
         //   Có argocd CLI → sync ngay; không có → ArgoCD tự sync qua webhook/poll như bình thường.
         stage('Deploy (ArgoCD sync)') {
-            when { expression { params.MODE != 'ci' && stageEnabled('deploy') } }
+            when { expression { params.MODE != 'ci' && !isWebhookTrigger() && stageEnabled('deploy') } }
             steps {
                 script {
                     if (sh(script: 'command -v argocd >/dev/null 2>&1', returnStatus: true) == 0) {
@@ -676,7 +676,7 @@ pipeline {
 
         // ── Commit GitOps manifest — ArgoCD đọc là tự deploy ──
         stage('Commit GitOps Manifest') {
-            when { expression { params.MODE != 'ci' && stageEnabled('gitops') && (params.MODE == 'release' || env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false') } }
+            when { expression { params.MODE != 'ci' && !isWebhookTrigger() && stageEnabled('gitops') && (params.MODE == 'release' || env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false') } }
             steps {
                 dir('deploy-web') {
                     script {
@@ -786,4 +786,18 @@ def parseEnabledStages(String raw) {
 
 def stageEnabled(String key) {
     return enabledStages.contains(key)
+}
+
+// [All-in-one] Phát hiện build tự trigger từ webhook (Generic Webhook Trigger).
+//   Push code → chỉ chạy CI, KHÔNG commit GitOps / không deploy.
+//   Deploy chỉ khi build TAY (Build with Parameters).
+def isWebhookTrigger() {
+    try {
+        return currentBuild.getBuildCauses().any {
+            def cls = it.getClass().getSimpleName().toLowerCase()
+            return cls.contains('generic')
+        }
+    } catch (Throwable e) {
+        return false
+    }
 }
