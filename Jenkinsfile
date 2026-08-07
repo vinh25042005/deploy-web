@@ -25,7 +25,9 @@ pipeline {
         // ── MODE + stage gating (1 Jenkinsfile, mọi cách chạy) ──
         choice(name: 'MODE', choices: ['full', 'ci', 'release'],
                description: 'full: build+scan+sign+GitOps | ci: chỉ build+scan+sign (không commit) | release: GitOps trỏ 1 IMAGE_TAG_OVERRIDE CÓ SẴN (không build)')
-        string(name: 'IMAGE_TAG_OVERRIDE', defaultValue: '', description: 'release mode: tag image đã có (VD: stg-45) để GitOps trỏ tới')
+        string(name: 'IMAGE_TAG_OVERRIDE', defaultValue: '', description: 'release mode: tag dùng chung cho backend + frontend (VD: stg-45) — ưu tiên thấp hơn *_BACKEND/*_FRONTEND')
+        string(name: 'IMAGE_TAG_OVERRIDE_BACKEND', defaultValue: '', description: 'release mode: tag riêng cho BACKEND (nếu có sẽ thay thế IMAGE_TAG_OVERRIDE; bỏ trống = giữ nguyên)')
+        string(name: 'IMAGE_TAG_OVERRIDE_FRONTEND', defaultValue: '', description: 'release mode: tag riêng cho FRONTEND (nếu có sẽ thay thế IMAGE_TAG_OVERRIDE; bỏ trống = giữ nguyên)')
         string(name: 'ENABLED_STAGES', defaultValue: '["fetch-secrets","cluster-secrets","sonar","build","scan","sign","verify","cleanup","gitops"]',
                description: 'JSON array bật/tắt stage. Mặc định: all. Thêm "test" (unit test) hoặc "deploy" (ArgoCD sync) khi cần.')
     }
@@ -95,7 +97,7 @@ pipeline {
                         env.IMAGE_TAG = tag
                         env.BUILD_BACKEND = 'true'
                         env.BUILD_FRONTEND = 'true'
-                        echo "release mode → GitOps sẽ trỏ ${env.ACTIVE_ENV} @ ${env.IMAGE_TAG} (không build)"
+                        echo "release mode → GitOps sẽ trỏ ${env.ACTIVE_ENV} (backend=${params.IMAGE_TAG_OVERRIDE_BACKEND ?: (params.IMAGE_TAG_OVERRIDE ?: 'giữ nguyên')} | frontend=${params.IMAGE_TAG_OVERRIDE_FRONTEND ?: (params.IMAGE_TAG_OVERRIDE ?: 'giữ nguyên')})"
                     } else if (params.MODE == 'ci') {
                         echo "ci mode → build+scan+sign, KHÔNG commit GitOps"
                     }
@@ -680,8 +682,10 @@ pipeline {
             steps {
                 dir('deploy-web') {
                     script {
-                        // release mode → GitOps trỏ tới IMAGE_TAG_OVERRIDE (tag CÓ SẴN, không build)
-                        def tag = (params.MODE == 'release' && params.IMAGE_TAG_OVERRIDE) ? params.IMAGE_TAG_OVERRIDE : env.IMAGE_TAG
+                        // release mode → GitOps trỏ tới tag CÓ SẴN.
+                        //   Ưu tiên: IMAGE_TAG_OVERRIDE_BACKEND/FRONTEND (riêng từng service) > IMAGE_TAG_OVERRIDE (chung)
+                        //   Bỏ trống 1 service → không cập nhật service đó (giữ nguyên tag hiện tại)
+                        def effectiveTag = (params.MODE == 'release' && params.IMAGE_TAG_OVERRIDE) ? params.IMAGE_TAG_OVERRIDE : env.IMAGE_TAG
                         def commitAuthor = 'release'
                         if (params.MODE != 'release') {
                             commitAuthor = sh(
@@ -689,8 +693,16 @@ pipeline {
                                 returnStdout: true
                             ).trim()
                         }
-                        def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${tag}" : ''
-                        def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${tag}" : ''
+                        def frontendTag = ''
+                        def backendTag = ''
+                        if (env.BUILD_BACKEND != 'false') {
+                            def bTag = (params.MODE == 'release') ? (params.IMAGE_TAG_OVERRIDE_BACKEND ?: params.IMAGE_TAG_OVERRIDE) : effectiveTag
+                            if (bTag) backendTag = "${REGISTRY_BASE}/deploy-web-backend:${bTag}"
+                        }
+                        if (env.BUILD_FRONTEND != 'false') {
+                            def fTag = (params.MODE == 'release') ? (params.IMAGE_TAG_OVERRIDE_FRONTEND ?: params.IMAGE_TAG_OVERRIDE) : effectiveTag
+                            if (fTag) frontendTag = "${REGISTRY_BASE}/deploy-web-frontend:${fTag}"
+                        }
                             def argocdFile = "helm/techshop/.argocd-source-techshop-${ACTIVE_ENV}.yaml"
 
                             // ── Merge .argocd-source: chỉ cập nhật image được build, GIỮ NGUYÊN phần còn lại ──
@@ -727,7 +739,7 @@ pipeline {
                                 git config user.name "jenkins-ci"
                                 git add ${argocdFile}
                                 git diff --cached --quiet && echo "No changes to commit" || {
-                                    git commit -m "deploy ${tag} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
+                                    git commit -m "deploy ${effectiveTag} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
                                     # Token GitHub nạp từ Vault (secret/ci/github) qua git credential helper
                                     # — không nhúng token vào URL/log
                                     git remote set-url origin https://github.com/vinh25042005/deploy-web.git
