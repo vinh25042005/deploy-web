@@ -15,6 +15,13 @@ pipeline {
         string(name: 'DEPLOY_BRANCH', defaultValue: 'week-6-argo-rollouts', description: 'Branch deploy-web mà ArgoCD đang track (argocd/root.yaml targetRevision)')
         string(name: 'VAULT_EIP', defaultValue: '52.221.18.86', description: 'Vault VM Elastic IP — VAULT_ADDR=https://<EIP>:8200 (bắt buộc khi dùng Vault standalone)')
         booleanParam(name: 'ROTATE_DB_PASSWORD', defaultValue: false, description: 'Rotate postgres password theo secret/postgres trong Vault (ALTER DB + restart backend)')
+
+        // ── MODE + stage gating (1 Jenkinsfile, mọi cách chạy) ──
+        choice(name: 'MODE', choices: ['full', 'ci', 'release'],
+               description: 'full: build+scan+sign+GitOps | ci: chỉ build+scan+sign (không commit) | release: GitOps trỏ 1 IMAGE_TAG_OVERRIDE CÓ SẴN (không build)')
+        string(name: 'IMAGE_TAG_OVERRIDE', defaultValue: '', description: 'release mode: tag image đã có (VD: stg-45) để GitOps trỏ tới')
+        string(name: 'ENABLED_STAGES', defaultValue: '["fetch-secrets","cluster-secrets","sonar","build","scan","sign","cleanup","gitops"]',
+               description: 'JSON array bật/tắt stage. Mặc định: all. Thêm "test" (unit test) hoặc "deploy" (ArgoCD sync) khi cần.')
     }
 
     environment {
@@ -41,6 +48,17 @@ pipeline {
     }
 
     stages {
+        // ── Initialization — đặt danh tính build sớm ──
+        stage('Initialization') {
+            steps {
+                script {
+                    currentBuild.displayName = "techshop · #${BUILD_NUMBER}"
+                    def src = env.GITHUB_BRANCH ? "Webhook: ${env.GITHUB_BRANCH}" : 'Manual'
+                    echo ">>> Pipeline techshop khởi động — trigger: ${src}"
+                }
+            }
+        }
+
         // ── Resolve ENV theo branch (auto-trigger) hoặc param (manual) ──────
         //   Auto (webhook push): main/release/staging → stg, branch khác → dev
         //   Manual (Build with Parameters): dùng ENV đã chọn
@@ -58,7 +76,58 @@ pipeline {
                         echo "Manual build: ENV=${env.ACTIVE_ENV}, branch=${env.APP_BRANCH}"
                     }
                     env.IMAGE_TAG = "${env.ACTIVE_ENV}-${BUILD_NUMBER}"
+
+                    // ── [All-in-one] MODE + ENABLED_STAGES ──
+                    env.MODE = params.MODE
+                    enabledStages = parseEnabledStages(params.ENABLED_STAGES)
+                    currentBuild.displayName = "techshop · ${env.ACTIVE_ENV} · ${params.MODE} · #${BUILD_NUMBER}"
+                    echo "→ MODE=${env.MODE} | ENABLED_STAGES=${enabledStages}"
+
+                    if (params.MODE == 'release') {
+                        // Deploy lại 1 tag CÓ SẴN — không build/scan, chỉ GitOps trỏ tới tag đó
+                        def tag = params.IMAGE_TAG_OVERRIDE ?: env.IMAGE_TAG
+                        env.IMAGE_TAG = tag
+                        env.BUILD_BACKEND = 'true'
+                        env.BUILD_FRONTEND = 'true'
+                        echo "release mode → GitOps sẽ trỏ ${env.ACTIVE_ENV} @ ${env.IMAGE_TAG} (không build)"
+                    } else if (params.MODE == 'ci') {
+                        echo "ci mode → build+scan+sign, KHÔNG commit GitOps"
+                    }
                     echo "→ ACTIVE_ENV=${env.ACTIVE_ENV} | IMAGE_TAG=${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        // ── Select Execution Mode — gate thủ công cho PRD ──
+        //   Chỉ kích hoạt khi build tay ENV=prd (webhook không bao giờ đụng prd).
+        stage('Select Execution Mode') {
+            when { expression { params.ENV == 'prd' && !env.GITHUB_BRANCH } }
+            steps {
+                script {
+                    def confirm = input(
+                        id: 'prdConfirm',
+                        message: "⚠️ DEPLOY PRODUCTION: ${env.ACTIVE_ENV} @ ${env.IMAGE_TAG} — xác nhận?",
+                        parameters: [booleanParameter(name: 'CONFIRM', defaultValue: false, description: 'Tick để xác nhận deploy production')]
+                    )
+                    if (!confirm) { error 'Không xác nhận → hủy deploy prd' }
+                    echo '>>> Đã xác nhận deploy production'
+                }
+            }
+        }
+
+        // ── Get Release Info — in thông tin release ──
+        stage('Get Release Info') {
+            steps {
+                script {
+                    echo '────────────────────── Release info ──────────────────────'
+                    echo "Project     : techshop"
+                    echo "Environment : ${env.ACTIVE_ENV}"
+                    echo "Mode        : ${params.MODE}"
+                    echo "Stages      : ${enabledStages}"
+                    echo "Image Tag   : ${env.IMAGE_TAG}"
+                    echo "App Branch  : ${env.APP_BRANCH}"
+                    echo "Deploy Repo : ${params.DEPLOY_BRANCH}"
+                    echo '──────────────────────────────────────────────────────────'
                 }
             }
         }
@@ -68,6 +137,7 @@ pipeline {
         //   `vault-approle-jenkins` (Vault role: jenkins, policy: techshop-ci).
         //   Stage này chỉ: kiểm tra secret đã load + cấu hình git credential helper.
         stage('Fetch Secrets from Vault') {
+            when { expression { stageEnabled('fetch-secrets') } }
             steps {
                 script {
                     // 0) Fail sớm nếu Vault/AppRole lỗi → secret rỗng
@@ -135,6 +205,7 @@ pipeline {
         //   - cosign-pub (Kyverno verify image) ← secret/cosign (public key)
         //   Lỗi hiện ngay tại stage này, không bị giấu trong trạng thái sync operator.
         stage('Reconcile Cluster Secrets (từ Vault)') {
+            when { expression { stageEnabled('cluster-secrets') } }
             steps {
                 script {
                     sh """
@@ -170,14 +241,20 @@ pipeline {
             parallel {
                 stage('Clone App Source') {
                     steps {
-                        dir('app-source') {
-                            // Token GitHub nạp từ Vault (secret/ci/github) qua git credential helper
-                            sh "git clone --branch '${APP_BRANCH}' '${APP_REPO}' ."
-                            script {
-                                // Commit thật của app-source — dùng cho SLSA provenance materials
-                                env.APP_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                                env.APP_COMMIT_FULL  = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                                echo "→ App source commit: ${env.APP_COMMIT_SHORT}"
+                        script {
+                            if (params.MODE == 'release') {
+                                echo 'release mode → bỏ qua clone app source (dùng IMAGE_TAG_OVERRIDE)'
+                            } else {
+                                dir('app-source') {
+                                    // Token GitHub nạp từ Vault (secret/ci/github) qua git credential helper
+                                    sh "git clone --branch '${APP_BRANCH}' '${APP_REPO}' ."
+                                    script {
+                                        // Commit thật của app-source — dùng cho SLSA provenance materials
+                                        env.APP_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                                        env.APP_COMMIT_FULL  = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                                        echo "→ App source commit: ${env.APP_COMMIT_SHORT}"
+                                    }
+                                }
                             }
                         }
                     }
@@ -193,6 +270,7 @@ pipeline {
         }
 
         stage('Check changes') {
+            when { expression { params.MODE != 'release' } }
             steps {
                 dir('app-source') {
                     script {
@@ -274,8 +352,27 @@ pipeline {
         //     }
         // }
 
+        // ── Unit Test — chạy test trước deploy ──
+        //   MẶC ĐỊNH TẮT — bật bằng cách thêm "test" vào ENABLED_STAGES.
+        //   Yêu cầu agent đã có node/npm.
+        stage('Unit Test') {
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && stageEnabled('test') } }
+            steps {
+                dir('app-source') {
+                    script {
+                        if (env.BUILD_BACKEND != 'false' && fileExists('backend/package.json')) {
+                            dir('backend') { sh 'npm ci --no-audit --no-fund 2>&1 && npm test 2>&1' }
+                        }
+                        if (env.BUILD_FRONTEND != 'false' && fileExists('frontend/package.json')) {
+                            dir('frontend') { sh 'npm ci --no-audit --no-fund 2>&1 && npx tsc --noEmit 2>&1' }
+                        }
+                    }
+                }
+            }
+        }
+
         stage('SonarQube Scan') {
-            when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && stageEnabled('sonar') && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
             steps {
                 dir('app-source') {
                     sh """
@@ -294,7 +391,7 @@ pipeline {
         }
 
         stage('Build & Push Backend') {
-            when { expression { !params.SKIP_BUILD && !params.SKIP_BACKEND && env.BUILD_BACKEND != 'false' } }
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && !params.SKIP_BACKEND && stageEnabled('build') && env.BUILD_BACKEND != 'false' } }
             steps {
                 dir('app-source') {
                     sh """
@@ -312,7 +409,7 @@ pipeline {
         }
 
         stage('Scan Backend') {
-            when { expression { !params.SKIP_BUILD && !params.SKIP_BACKEND && env.BUILD_BACKEND != 'false' } }
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && !params.SKIP_BACKEND && stageEnabled('scan') && env.BUILD_BACKEND != 'false' } }
             steps {
                 dir('app-source') {
                     sh """
@@ -343,7 +440,7 @@ pipeline {
         }
 
         stage('Build & Push Frontend') {
-            when { expression { !params.SKIP_BUILD && !params.SKIP_FRONTEND && env.BUILD_FRONTEND != 'false' } }
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && !params.SKIP_FRONTEND && stageEnabled('build') && env.BUILD_FRONTEND != 'false' } }
             steps {
                 dir('app-source') {
                     sh """
@@ -362,7 +459,7 @@ pipeline {
         }
 
         stage('Scan Frontend') {
-            when { expression { !params.SKIP_BUILD && !params.SKIP_FRONTEND && env.BUILD_FRONTEND != 'false' } }
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && !params.SKIP_FRONTEND && stageEnabled('scan') && env.BUILD_FRONTEND != 'false' } }
             steps {
                 dir('app-source') {
                     sh """
@@ -397,7 +494,7 @@ pipeline {
         //   Key được ghi ra file (printf giữ nguyên newline — env:// làm vỡ PEM block).
         //   Public key export ra cosign-public.pem → dùng cho Kyverno/OPA verify khi deploy.
         stage('Sign & Attest (Cosign + SLSA)') {
-            when { expression { !params.SKIP_BUILD && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && stageEnabled('sign') && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
             steps {
                 dir('app-source') {
                     // Sinh SLSA provenance JSON bằng Groovy (tránh escape $ trong shell heredoc)
@@ -485,17 +582,55 @@ pipeline {
             }
         }
 
-        stage('Commit tag to Git') {
-            when { expression { env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false' } }
+        // ── Cleanup — dọn image cũ ──
+        stage('Cleanup Docker Images') {
+            when { expression { stageEnabled('cleanup') } }
+            steps {
+                script {
+                    def registry = REGISTRY_BASE
+                    def fmt = '{{.CreatedAt}}|{{.ID}}'
+                    sh "docker images '${registry}/deploy-web-backend' --format '${fmt}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
+                    sh "docker images '${registry}/deploy-web-frontend' --format '${fmt}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
+                    sh "docker system prune -f --filter 'until=24h' 2>/dev/null || true"
+                    echo '>>> Đã dọn image cũ (giữ 3 mới nhất)'
+                }
+            }
+        }
+
+        // ── Deploy — đẩy nhanh ArgoCD sync ──
+        //   MẶC ĐỊNH TẮT — bật bằng "deploy" trong ENABLED_STAGES.
+        //   Có argocd CLI → sync ngay; không có → ArgoCD tự sync qua webhook/poll như bình thường.
+        stage('Deploy (ArgoCD sync)') {
+            when { expression { params.MODE != 'ci' && stageEnabled('deploy') } }
+            steps {
+                script {
+                    if (sh(script: 'command -v argocd >/dev/null 2>&1', returnStatus: true) == 0) {
+                        sh "argocd app sync techshop-${env.ACTIVE_ENV} --async || echo 'ArgoCD sync lỗi (bỏ qua — ArgoCD tự sync)'; true"
+                        echo '>>> Đã trigger ArgoCD sync'
+                    } else {
+                        echo '>>> argocd CLI không có — ArgoCD tự sync qua webhook/poll (bình thường)'
+                    }
+                }
+            }
+        }
+
+        // ── Commit GitOps manifest — ArgoCD đọc là tự deploy ──
+        stage('Commit GitOps Manifest') {
+            when { expression { params.MODE != 'ci' && stageEnabled('gitops') && (params.MODE == 'release' || env.BUILD_FRONTEND != 'false' || env.BUILD_BACKEND != 'false') } }
             steps {
                 dir('deploy-web') {
                     script {
-                        def commitAuthor = sh(
+                        // release mode → GitOps trỏ tới IMAGE_TAG_OVERRIDE (tag CÓ SẴN, không build)
+                        def tag = (params.MODE == 'release' && params.IMAGE_TAG_OVERRIDE) ? params.IMAGE_TAG_OVERRIDE : env.IMAGE_TAG
+                        def commitAuthor = 'release'
+                        if (params.MODE != 'release') {
+                            commitAuthor = sh(
                                 script: 'cd ../app-source && git log -1 --format="%an <%ae>"',
                                 returnStdout: true
                             ).trim()
-                            def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}" : ''
-                            def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}" : ''
+                        }
+                        def frontendTag = env.BUILD_FRONTEND != 'false' ? "${REGISTRY_BASE}/deploy-web-frontend:${tag}" : ''
+                        def backendTag = env.BUILD_BACKEND != 'false' ? "${REGISTRY_BASE}/deploy-web-backend:${tag}" : ''
                             def argocdFile = "helm/techshop/.argocd-source-techshop-${ACTIVE_ENV}.yaml"
 
                             // ── Merge .argocd-source: chỉ cập nhật image được build, GIỮ NGUYÊN phần còn lại ──
@@ -532,7 +667,7 @@ pipeline {
                                 git config user.name "jenkins-ci"
                                 git add ${argocdFile}
                                 git diff --cached --quiet && echo "No changes to commit" || {
-                                    git commit -m "deploy ${IMAGE_TAG} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
+                                    git commit -m "deploy ${tag} by ${commitAuthor} (build #${BUILD_NUMBER}) [skip ci]"
                                     # Token GitHub nạp từ Vault (secret/ci/github) qua git credential helper
                                     # — không nhúng token vào URL/log
                                     git remote set-url origin https://github.com/vinh25042005/deploy-web.git
@@ -550,7 +685,7 @@ pipeline {
     }
 
     post {
-        success { echo "✅ CI thành công! ArgoCD sẽ deploy ${ACTIVE_ENV} @ ${IMAGE_TAG}" }
+        success { echo "✅ CI thành công [${params.MODE}]! ArgoCD sẽ deploy ${ACTIVE_ENV} @ ${IMAGE_TAG}" }
         failure { echo "❌ CI thất bại!" }
         always {
             script {
@@ -571,4 +706,24 @@ pipeline {
             }
         }
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// [All-in-one] Helpers: MODE & ENABLED_STAGES gating
+//   - parseEnabledStages: hỗ trợ JSON array HOẶC CSV
+//   - stageEnabled(key):   stage có trong ENABLED_STAGES hay không
+// ═══════════════════════════════════════════════════════════════════════════
+@groovy.transform.Field
+Set<String> enabledStages = []
+
+def parseEnabledStages(String raw) {
+    raw = raw?.trim() ?: ''
+    if (raw.startsWith('[')) {
+        return new groovy.json.JsonSlurper().parseText(raw) as Set<String>
+    }
+    return raw.split(',').collect { it.trim() } as Set<String>
+}
+
+def stageEnabled(String key) {
+    return enabledStages.contains(key)
 }
