@@ -18,30 +18,11 @@ spec:
     metadata:
       labels:
         app: postgres
-      annotations:
-        vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/role: "techshop"
-        vault.hashicorp.com/agent-inject-status: "update"
-        vault.hashicorp.com/tls-skip-verify: "true"
-        # Giảm resource mặc định 250m của vault-agent (sidecar + init) để tiết CPU cho cluster 2 vCPU
-        vault.hashicorp.com/agent-requests-cpu: "100m"
-        vault.hashicorp.com/agent-limits-cpu: "250m"
-        vault.hashicorp.com/agent-init-requests-cpu: "100m"
-        vault.hashicorp.com/agent-init-limits-cpu: "250m"
-        vault.hashicorp.com/agent-inject-secret-postgres: "secret/data/postgres"
-        vault.hashicorp.com/agent-inject-template-postgres: |
-          export POSTGRES_PASSWORD={{"{{"}}- with secret "secret/data/postgres" }}{{"{{"}} .Data.data.password }}{{"{{"}}- end }}
     spec:
       containers:
         - name: postgres
           image: {{ .Values.images.postgres }}
           imagePullPolicy: Always
-          command:
-            - sh
-            - -c
-            - |
-              source /vault/secrets/postgres
-              exec docker-entrypoint.sh postgres
           ports:
             - containerPort: {{ .Values.postgres.port }}
           env:
@@ -49,6 +30,9 @@ spec:
               value: {{ .Values.postgres.user | quote }}
             - name: POSTGRES_DB
               value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-secret, key: password }   # mentor: pipeline tạo từ Vault
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/postgresql/data

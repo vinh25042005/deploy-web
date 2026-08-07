@@ -74,13 +74,9 @@ ingress-nginx:
       useHostPort: true
     service:
       type: ClusterIP
-    nodeSelector:
-      role: ingress
-    tolerations:
-      - key: role
-        operator: Equal
-        value: ingress
-        effect: NoSchedule
+    # ── Không còn ingress node chuyên dụng (ingress_count=0) ──
+    #   DaemonSet chạy trên MỌI node (master đã Ansible untaint) —
+    #   NLB trỏ 80/443 tới node-1/node-2, hostNetwork bind IP node.
     admissionWebhooks:
       enabled: false
     # ─── Metrics cho AnalysisTemplate (Argo Rollouts) ───
@@ -144,26 +140,12 @@ kube-prometheus-stack:
   # Admin credentials đọc TRỰC TIẾP từ Vault (Vault Agent Injector → file,
   # Grafana đọc qua GF_SECURITY_ADMIN_*__FILE). Không dùng ESO.
   grafana:
-    podAnnotations:
-      vault.hashicorp.com/agent-inject: "true"
-      vault.hashicorp.com/role: "techshop"
-      vault.hashicorp.com/agent-inject-status: "update"
-      vault.hashicorp.com/tls-skip-verify: "true"
-      vault.hashicorp.com/agent-requests-cpu: "100m"
-      vault.hashicorp.com/agent-limits-cpu: "250m"
-      vault.hashicorp.com/agent-init-requests-cpu: "100m"
-      vault.hashicorp.com/agent-init-limits-cpu: "250m"
-      vault.hashicorp.com/agent-inject-secret-grafana-admin-password: "secret/data/grafana"
-      vault.hashicorp.com/agent-inject-template-grafana-admin-password: |
-        {{"{{"}} with secret "secret/data/grafana" }}{{"{{"}} .Data.data.admin_password }}{{"{{"}} end }}
-    env:
-      # GF_SECURITY_ADMIN_USER (plain, static "admin") bắt buộc để chart BỎ QUA
-      # secretKeyRef tới secret <rel>-grafana.
-      # ⚠️ KHÔNG set GF_SECURITY_ADMIN_USER__FILE song song: Grafana 11 coi 2 biến
-      # này là EXCLUSIVE → "Both ... are set (but are exclusive)" → CrashLoopBackOff.
-      # Mật khẩu nhạy cảm đọc TRỰC TIẾP từ Vault qua __FILE (Vault Agent Injector).
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/grafana-admin-password
+    # Mentor style: mật khẩu admin lấy từ k8s Secret grafana-secret (Ansible tạo từ Vault khi apply).
+    # Đồng thời tránh luôn lỗi "Both GF_SECURITY_ADMIN_USER/__FILE are set (exclusive)" của Grafana 11.
+    admin:
+      existingSecret: grafana-secret
+      userKey: admin-user
+      passwordKey: admin_password
     service:
       type: ClusterIP
       port: 80

@@ -114,18 +114,19 @@ resource "aws_lb_target_group" "ingress_https" {
   tags = { Name = "${var.project_name}-ingress-https" }
 }
 
-# Gắn ingress nodes vào target group (dùng instance ID)
+# Gắn các node K8s vào target group — ingress-nginx chạy trên MỌI node (hostNetwork 80/443).
+# Đã BỎ ingress nodes chuyên dụng (ingress_count=0) để tiết kiệm chi phí.
 resource "aws_lb_target_group_attachment" "ingress_http" {
-  count            = var.ingress_count
+  count            = var.node_count
   target_group_arn = aws_lb_target_group.ingress_http.arn
-  target_id        = module.compute.ingress_instance_ids[count.index]
+  target_id        = module.compute.node_instance_ids[count.index]
   port             = 80
 }
 
 resource "aws_lb_target_group_attachment" "ingress_https" {
-  count            = var.ingress_count
+  count            = var.node_count
   target_group_arn = aws_lb_target_group.ingress_https.arn
-  target_id        = module.compute.ingress_instance_ids[count.index]
+  target_id        = module.compute.node_instance_ids[count.index]
   port             = 443
 }
 

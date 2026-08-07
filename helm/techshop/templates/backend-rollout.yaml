@@ -18,30 +18,6 @@ spec:
     metadata:
       labels:
         app: backend
-      annotations:
-        # Vault Agent Injector — đọc secret TRỰC TIẾP từ Vault (không qua ESO)
-        vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/role: "techshop"
-        vault.hashicorp.com/agent-inject-status: "update"
-        vault.hashicorp.com/tls-skip-verify: "true"
-        # ⚠️ BẮT BUỘC: vault-agent-init phải chạy ĐẦU TIÊN (mặc định injector nối
-        # init container vào CUỐI danh sách). prisma-migrate source
-        # /vault/secrets/backend-env → nếu không có annotation này, secrets chưa
-        # tồn tại khi prisma-migrate chạy → Init:Error "can't open ... No such file".
-        vault.hashicorp.com/agent-init-first: "true"
-        # Giảm resource mặc định của vault-agent (cluster 2 vCPU)
-        vault.hashicorp.com/agent-requests-cpu: "100m"
-        vault.hashicorp.com/agent-limits-cpu: "250m"
-        vault.hashicorp.com/agent-init-requests-cpu: "100m"
-        vault.hashicorp.com/agent-init-limits-cpu: "250m"
-        vault.hashicorp.com/agent-inject-secret-backend-env: "secret/data/postgres"
-        vault.hashicorp.com/agent-inject-template-backend-env: |
-          {{"{{"}} with secret "secret/data/postgres" }}
-          export DATABASE_URL='postgresql://postgres:{{"{{"}} .Data.data.password }}@postgres:5432/shopdb?schema=public'
-          {{"{{"}} end }}
-          {{"{{"}} with secret "secret/data/jwt" }}
-          export JWT_SECRET='{{"{{"}} .Data.data.secret }}'
-          {{"{{"}} end }}
     spec:
       imagePullSecrets:
         - name: dockerhub-secret
@@ -67,20 +43,21 @@ spec:
           image: {{ .Values.images.backend }}
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
-          args: [". /vault/secrets/backend-env && npx prisma db push"]
+          args: ["npx prisma db push"]
           envFrom:
             - configMapRef: { name: backend-config }
+            - secretRef: { name: backend-env-secret }   # mentor: secret do Ansible/pipeline tạo từ Vault
       containers:
         - name: backend
           image: {{ .Values.images.backend }}
           imagePullPolicy: Always
-          # Secret nạp từ Vault Agent Injector (/vault/secrets/backend-env)
           command: ["/bin/sh", "-c"]
-          args: [". /vault/secrets/backend-env && exec node dist/index.js"]
+          args: ["exec node dist/index.js"]
           ports:
             - containerPort: {{ .Values.backend.port }}
           envFrom:
             - configMapRef: { name: backend-config }
+            - secretRef: { name: backend-env-secret }   # DATABASE_URL + JWT_SECRET từ Vault (pipeline tạo)
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
       affinity:

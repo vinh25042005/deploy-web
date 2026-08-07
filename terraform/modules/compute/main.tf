@@ -93,7 +93,9 @@ resource "aws_instance" "node" {
   tags = { Name = "${var.project_name}-k8s-node-${count.index + 1}" }
 }
 
-# ── Ingress Nodes: 2 EC2 public subnet, join K8s as worker role=ingress ──
+# ── Ingress Nodes: EC2 public subnet, join K8s as worker role=ingress ──
+#   MẶC ĐỊNH 0 (ingress_count=0) — BỎ ingress node chuyên dụng để tiết kiệm chi phí;
+#   ingress-nginx chạy trên các node chính. Chỉ tạo khi chủ động set ingress_count > 0.
 resource "aws_instance" "ingress" {
   count                  = var.ingress_count
   ami                    = data.aws_ami.ubuntu.id

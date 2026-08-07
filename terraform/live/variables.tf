@@ -38,8 +38,8 @@ variable "node_count" {
 
 variable "ingress_count" {
   type        = number
-  default     = 1
-  description = "Số EC2 ingress nodes (giảm còn 1 để tiết kiệm chi phí — mất HA, chấp nhận được cho lab)"
+  default     = 0
+  description = "Số EC2 ingress nodes chuyên dụng. Đặt 0 để BỎ ingress node (tiết kiệm chi phí) — ingress-nginx chạy trên các node worker/master, NLB trỏ thẳng tới node."
 }
 
 variable "vault_addr" {

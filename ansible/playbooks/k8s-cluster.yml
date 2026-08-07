@@ -106,9 +106,56 @@
           -n argocd deployment/argocd-server
       changed_when: false
 
-    - name: Apply ArgoCD root app (app-of-apps)
+    # ── [Mentor-style] Provision app k8s Secrets từ Vault (chạy trên control node) ──
+    #   get vault → tạo k8s Secret → app (helm) mount. Chạy TRƯỚC khi ArgoCD deploy app.
+    #   Control node (localhost) có AWS creds đọc SSM + kubeconfig + Vault access.
+    - name: Provision app k8s Secrets từ Vault
+      delegate_to: localhost
+      become: false
+      run_once: true
       shell: |
-        kubectl apply -f https://raw.githubusercontent.com/vinh25042005/deploy-web/week-6-argo-rollouts/argocd/root.yaml
+        set -euo pipefail
+        # Kubeconfig mới nhất từ SSM (master upload sau kubeadm init) — kubectl đúng cluster VỪA apply
+        # (local kubeconfig cũ có thể đang trỏ cluster đã destroy → kubectl fail).
+        aws ssm get-parameter --name /k8s/kubeconfig --with-decryption \
+          --region ap-southeast-1 --query Parameter.Value --output text \
+          | base64 -d | gunzip > ~/.kube/config
+        chmod 600 ~/.kube/config
+
+        VAULT_ADDR="https://52.221.18.86:8200"
+        VAULT_TOKEN="$(aws ssm get-parameter --name /techshop/vault-root-token \
+          --with-decryption --region ap-southeast-1 --query Parameter.Value --output text)"
+        vget() { curl -sk -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/$1" | jq -r "$2"; }
+
+        PG_PASS="$(vget secret/data/postgres '.data.data.password')"
+        JWT_SEC="$(vget secret/data/jwt '.data.data.secret')"
+        GRAFANA_PASS="$(vget secret/data/grafana '.data.data.admin_password')"
+        COSIGN_PUB="$(vget secret/data/cosign '.data.data.public_key')"
+
+        for NS in techshop-dev techshop-stg; do
+          kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+          # App secrets (mentor style — app mount qua secretRef)
+          kubectl create secret generic backend-env-secret -n "$NS" \
+            --from-literal=DATABASE_URL="postgresql://postgres:$PG_PASS@postgres:5432/shopdb?schema=public" \
+            --from-literal=JWT_SECRET="$JWT_SEC" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic postgres-secret -n "$NS" \
+            --from-literal=password="$PG_PASS" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic grafana-secret -n "$NS" \
+            --from-literal=admin-user=admin \
+            --from-literal=admin_password="$GRAFANA_PASS" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          printf '%s' "$COSIGN_PUB" > /tmp/cosign.pub
+          kubectl create secret generic cosign-pub -n "$NS" \
+            --from-file=cosign.pub=/tmp/cosign.pub \
+            --dry-run=client -o yaml | kubectl apply -f -
+        done
+        echo ">>> Đã tạo app k8s Secrets từ Vault (backend-env, postgres, grafana, cosign)"
       changed_when: false
 
     - name: Add repository credential to ArgoCD
@@ -144,6 +191,7 @@
           --dry-run=client -o yaml | kubectl apply -f -
       loop:
         - techshop-dev
+        - techshop-stg
         - argocd
       changed_when: false
 
@@ -198,4 +246,12 @@
             volumeID: {{ old_vol.stdout }}
             fsType: ext4
         EOFM
+      changed_when: false
+
+    # ── CUỐI CÙNG: apply ArgoCD root app (app-of-apps) — SAU mọi prerequisite ──
+    #   (repo credential, dockerhub-secret, ClusterIssuer, app secrets, PV) để
+    #   ArgoCD sync app thành công NGAY LẦN ĐẦU — tránh "cài này cần cái kia".
+    - name: Apply ArgoCD root app (app-of-apps)
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/vinh25042005/deploy-web/week-6-argo-rollouts/argocd/root.yaml
       changed_when: false

@@ -1,6 +1,8 @@
 {{- if .Values.postgres.enabled }}
 {{- if .Values.postgres.backup.enabled }}
 # ── Backup CronJob: dump DB lên S3 mỗi 6h ──
+# Mentor style: password lấy từ k8s Secret postgres-secret (Ansible/pipeline tạo từ Vault).
+# KHÔNG cần login vào Vault (bỏ vault CLI + k8s auth) — giảm 1 dependency cho cluster.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -18,21 +20,9 @@ spec:
             app: postgres-backup
         spec:
           restartPolicy: OnFailure
-          {{ if .Values.postgres.backup.vaultCaConfigMap }}
-          volumes:
-            - name: vault-ca
-              configMap:
-                name: {{ .Values.postgres.backup.vaultCaConfigMap }}
-          {{ end }}
           containers:
           - name: backup
             image: postgres:16-alpine
-            {{ if .Values.postgres.backup.vaultCaConfigMap }}
-            volumeMounts:
-              - name: vault-ca
-                mountPath: /vault/ca
-                readOnly: true
-            {{ end }}
             env:
             - name: PGHOST
               value: "postgres"
@@ -44,23 +34,15 @@ spec:
               value: {{ .Values.postgres.backup.s3Bucket | quote }}
             - name: AWS_REGION
               value: {{ .Values.postgres.backup.s3Region | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-secret, key: password }   # mentor: pipeline/Ansible tạo từ Vault
             command:
             - /bin/sh
             - -c
             - |
               set -e
-              # Password đọc TRỰC TIẾP từ Vault (kubernetes auth — default SA, role techshop)
-              apk add --no-cache aws-cli unzip curl >/dev/null 2>&1
-              curl -fsSL https://releases.hashicorp.com/vault/1.18.5/vault_1.18.5_linux_amd64.zip -o /tmp/vault.zip
-              unzip -o /tmp/vault.zip -d /usr/local/bin >/dev/null
-              export VAULT_ADDR={{ .Values.postgres.backup.vaultAddr | quote }}
-              {{ if .Values.postgres.backup.vaultCaConfigMap }}
-              export VAULT_CACERT=/vault/ca/ca.crt
-              {{ else }}
-              export VAULT_SKIP_VERIFY=true
-              {{ end }}
-              vault login -method=kubernetes role=techshop >/dev/null
-              export PGPASSWORD=$(vault kv get -field=password secret/postgres)
+              apk add --no-cache aws-cli >/dev/null 2>&1
               FILE="backup-$(date +%Y%m%d-%H%M%S).sql.gz"
               pg_dump -h $PGHOST -U $PGUSER -d $PGDATABASE | gzip > /tmp/$FILE
               aws s3 cp /tmp/$FILE s3://$S3_BUCKET/$FILE

@@ -64,7 +64,7 @@ variable "ingress_sg_ids" {
 }
 variable "ingress_count" {
   type    = number
-  default = 2
+  default = 0
 }
 
 # ── Backup ──
