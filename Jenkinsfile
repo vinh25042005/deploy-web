@@ -176,6 +176,22 @@ pipeline {
                 }
             }
         }
+        // ── Fetch Kubeconfig (SSM) — cluster destroy/apply nhiều lần, IP đổi ──
+        //   Mỗi lần chạy pipeline: lấy kubeconfig MỚI NHẤT từ SSM /k8s/kubeconfig
+        //   (base64+gzip) → ghi ~/.kube/config → kubectl luôn trỏ đúng API server
+        //   hiện tại. Agent dùng IAM instance role (techshop-jenkins-role), không
+        //   hardcode key. Fail sớm nếu không đọc được hoặc không kết nối được cluster.
+        stage('Fetch Kubeconfig (SSM)') {
+            steps {
+                sh """
+                    set -e
+                    aws ssm get-parameter --name /k8s/kubeconfig --with-decryption \\
+                      --query 'Parameter.Value' --output text | base64 -d | gunzip > ~/.kube/config
+                    chmod 600 ~/.kube/config
+                    kubectl get ns >/dev/null 2>&1 && echo '>>> Kubeconfig OK (từ SSM)' || { echo 'ERROR: kubectl không kết nối được cluster — kiểm tra SSM /k8s/kubeconfig'; exit 1; }
+                """
+            }
+        }
         // ── Rotate postgres password (theo secret/postgres trong Vault) ──────
         //   Cách dùng: 1) đổi password trong Vault (vault kv patch secret/postgres password=<mới>)
         //              2) chạy build này với ROTATE_DB_PASSWORD=true
