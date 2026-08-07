@@ -28,12 +28,22 @@ pipeline {
         string(name: 'IMAGE_TAG_OVERRIDE', defaultValue: '', description: 'release mode: tag dùng chung cho backend + frontend (VD: stg-45) — ưu tiên thấp hơn *_BACKEND/*_FRONTEND')
         string(name: 'IMAGE_TAG_OVERRIDE_BACKEND', defaultValue: '', description: 'release mode: tag riêng cho BACKEND (nếu có sẽ thay thế IMAGE_TAG_OVERRIDE; bỏ trống = giữ nguyên)')
         string(name: 'IMAGE_TAG_OVERRIDE_FRONTEND', defaultValue: '', description: 'release mode: tag riêng cho FRONTEND (nếu có sẽ thay thế IMAGE_TAG_OVERRIDE; bỏ trống = giữ nguyên)')
+
+        // ── [Project-generic] 1 Jenkinsfile chạy được nhiều dự án ──
+        string(name: 'PROJECT_NAME', defaultValue: 'techshop', description: 'Tên dự án — namespace (<project>-<env>), ArgoCD app, .argocd-source, sonar key')
+        string(name: 'APP_REPO', defaultValue: 'https://github.com/vinh25042005/techshop-app.git', description: 'Repo mã nguồn app (VD: https://github.com/org/myapp.git)')
+        string(name: 'REGISTRY_BASE', defaultValue: 'docker.io/vinh2504', description: 'Docker registry base (VD: docker.io/org)')
+        string(name: 'IMAGE_REPO_PREFIX', defaultValue: 'deploy-web', description: 'Tiền tố image → <prefix>-backend, <prefix>-frontend (VD: deploy-web, myapp)')
+        string(name: 'VAULT_DB_PATH', defaultValue: 'secret/postgres', description: 'Vault path chứa password DB (VD: secret/myapp/postgres)')
         string(name: 'ENABLED_STAGES', defaultValue: '["fetch-secrets","cluster-secrets","sonar","build","scan","sign","verify","cleanup","gitops"]',
                description: 'JSON array bật/tắt stage. Mặc định: all. Thêm "test" (unit test) hoặc "deploy" (ArgoCD sync) khi cần.')
     }
 
     environment {
-        REGISTRY_BASE = 'docker.io/vinh2504'
+        REGISTRY_BASE = params.REGISTRY_BASE
+        // Tên image đầy đủ — <REGISTRY_BASE>/<IMAGE_REPO_PREFIX>-backend / -frontend
+        IMAGE_BACKEND  = "${params.REGISTRY_BASE}/${params.IMAGE_REPO_PREFIX}-backend"
+        IMAGE_FRONTEND = "${params.REGISTRY_BASE}/${params.IMAGE_REPO_PREFIX}-frontend"
         GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
 
         // Vault — CI đọc secret TRỰC TIẾP từ Vault VM qua HashiCorp Vault Plugin
@@ -49,10 +59,10 @@ pipeline {
         COSIGN_PRIVATE_KEY = vault path: 'secret/ci/cosign', key: 'private_key'
         COSIGN_PUBLIC_KEY  = vault path: 'secret/cosign', key: 'public_key'
         // Password postgres — 1 nguồn chân lý duy nhất (postgres init + backend DATABASE_URL)
-        DB_PASSWORD = vault path: 'secret/postgres', key: 'password'
+        DB_PASSWORD = vault path: params.VAULT_DB_PATH, key: 'password'
 
         // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
-        APP_REPO = 'https://github.com/vinh25042005/techshop-app.git'
+        APP_REPO = params.APP_REPO
     }
 
     stages {
@@ -60,9 +70,9 @@ pipeline {
         stage('Initialization') {
             steps {
                 script {
-                    currentBuild.displayName = "techshop · #${BUILD_NUMBER}"
+                    currentBuild.displayName = "${params.PROJECT_NAME} · #${BUILD_NUMBER}"
                     def src = env.GITHUB_BRANCH ? "Webhook: ${env.GITHUB_BRANCH}" : 'Manual'
-                    echo ">>> Pipeline techshop khởi động — trigger: ${src}"
+                    echo ">>> Pipeline ${params.PROJECT_NAME} khởi động — trigger: ${src}"
                 }
             }
         }
@@ -88,7 +98,7 @@ pipeline {
                     // ── [All-in-one] MODE + ENABLED_STAGES ──
                     env.MODE = params.MODE
                     enabledStages = parseEnabledStages(params.ENABLED_STAGES)
-                    currentBuild.displayName = "techshop · ${env.ACTIVE_ENV} · ${params.MODE} · #${BUILD_NUMBER}"
+                    currentBuild.displayName = "${params.PROJECT_NAME} · ${env.ACTIVE_ENV} · ${params.MODE} · #${BUILD_NUMBER}"
                     echo "→ MODE=${env.MODE} | ENABLED_STAGES=${enabledStages}"
 
                     if (params.MODE == 'release') {
@@ -128,7 +138,7 @@ pipeline {
             steps {
                 script {
                     echo '────────────────────── Release info ──────────────────────'
-                    echo "Project     : techshop"
+                    echo "Project     : ${params.PROJECT_NAME}"
                     echo "Environment : ${env.ACTIVE_ENV}"
                     echo "Mode        : ${params.MODE}"
                     echo "Stages      : ${enabledStages}"
@@ -208,18 +218,18 @@ pipeline {
                     sh """
                         set -e
                         echo "ALTER USER postgres WITH PASSWORD '${DB_PASSWORD}';" | \\
-                          kubectl exec -i -n techshop-stg pod/postgres-0 -- psql -U postgres -d shopdb
+                          kubectl exec -i -n ${params.PROJECT_NAME}-${env.ACTIVE_ENV} pod/postgres-0 -- psql -U postgres -d shopdb
                         echo '>>> Đã ALTER password postgres trong DB'
                     """
                     // 2) Restart backend — pod mới source secret mới từ Vault (DATABASE_URL tự ghép)
                     script {
                         def restartAt = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
-                        sh "kubectl -n techshop-stg patch rollout backend --type merge -p '{\"spec\":{\"restartAt\":\"${restartAt}\"}}'"
+                        sh "kubectl -n ${params.PROJECT_NAME}-${env.ACTIVE_ENV} patch rollout backend --type merge -p '{\"spec\":{\"restartAt\":\"${restartAt}\"}}'"
                     }
                     // 3) Chờ + verify backend không CrashLoop
                     sh """
                         sleep 25
-                        kubectl get pods -n techshop-stg -l app=backend
+                        kubectl get pods -n ${params.PROJECT_NAME}-${env.ACTIVE_ENV} -l app=backend
                     """
                 }
             }
@@ -234,7 +244,7 @@ pipeline {
                 script {
                     sh """
                         set -e
-                        for ns in techshop-dev techshop-stg; do
+                        for ns in ${params.PROJECT_NAME}-dev ${params.PROJECT_NAME}-stg; do
                             if kubectl get namespace "\$ns" >/dev/null 2>&1; then
                                 kubectl create secret docker-registry dockerhub-secret -n "\$ns" \\
                                     --docker-server=docker.io \\
@@ -250,11 +260,11 @@ pipeline {
                     sh """
                         set -e
                         printf '%s' "\$COSIGN_PUBLIC_KEY" > /tmp/cosign.pub
-                        if kubectl get namespace techshop-stg >/dev/null 2>&1; then
-                            kubectl create secret generic cosign-pub -n techshop-stg \\
+                        if kubectl get namespace ${params.PROJECT_NAME}-stg >/dev/null 2>&1; then
+                            kubectl create secret generic cosign-pub -n ${params.PROJECT_NAME}-stg \\
                                 --from-file=cosign.pub=/tmp/cosign.pub \\
                                 --dry-run=client -o yaml | kubectl apply -f -
-                            echo '  ✅ cosign-pub đã sync (techshop-stg) từ Vault'
+                            echo '  ✅ cosign-pub đã sync (${params.PROJECT_NAME}-stg) từ Vault'
                         fi
                     """
                 }
@@ -402,7 +412,7 @@ pipeline {
                     sh """
                         set -e
                         sonar-scanner \\
-                            -Dsonar.projectKey=techshop-app \\
+                            -Dsonar.projectKey=${params.PROJECT_NAME}-app \\
                             -Dsonar.sources=frontend/src,backend/src \\
                             -Dsonar.host.url=http://sonarqube:9000 \\
                             -Dsonar.token=\$SONAR_TOKEN \\
@@ -422,11 +432,11 @@ pipeline {
                         set -e
                         echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                         docker build -f backend/Dockerfile \\
-                            -t ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
-                            -t ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV} \
+                            -t ${IMAGE_BACKEND}:${IMAGE_TAG} \
+                            -t ${IMAGE_BACKEND}:${ACTIVE_ENV} \
                             .
-                        docker push ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
-                        docker push ${REGISTRY_BASE}/deploy-web-backend:${ACTIVE_ENV}
+                        docker push ${IMAGE_BACKEND}:${IMAGE_TAG}
+                        docker push ${IMAGE_BACKEND}:${ACTIVE_ENV}
                     """
                 }
             }
@@ -437,7 +447,7 @@ pipeline {
             steps {
                 dir('app-source') {
                     sh """
-                        trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                        trivy image ${IMAGE_BACKEND}:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --scanners vuln \
                             --format table \
@@ -445,13 +455,13 @@ pipeline {
                             grep -v "node_modules" | \
                             tee trivy-backend.txt || true
 
-                        trivy image ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                        trivy image ${IMAGE_BACKEND}:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --format sarif \
                             --output trivy-backend.sarif \
                             --exit-code 0 || true
 
-                        syft ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} \
+                        syft ${IMAGE_BACKEND}:${IMAGE_TAG} \
                             -o spdx-json=sbom-backend.spdx.json || true
                     """
                 }
@@ -472,11 +482,11 @@ pipeline {
                         echo \$DOCKER_PAT | docker login -u \$DOCKER_USER --password-stdin
                         docker build -f frontend/Dockerfile \\
                             --build-arg BACKEND_INTERNAL_URL=http://backend:3001 \\
-                            -t ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
-                            -t ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV} \
+                            -t ${IMAGE_FRONTEND}:${IMAGE_TAG} \
+                            -t ${IMAGE_FRONTEND}:${ACTIVE_ENV} \
                             .
-                        docker push ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
-                        docker push ${REGISTRY_BASE}/deploy-web-frontend:${ACTIVE_ENV}
+                        docker push ${IMAGE_FRONTEND}:${IMAGE_TAG}
+                        docker push ${IMAGE_FRONTEND}:${ACTIVE_ENV}
                     """
                 }
             }
@@ -487,7 +497,7 @@ pipeline {
             steps {
                 dir('app-source') {
                     sh """
-                        trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
+                        trivy image ${IMAGE_FRONTEND}:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --scanners vuln \
                             --format table \
@@ -495,13 +505,13 @@ pipeline {
                             grep -v "node_modules" | \
                             tee trivy-frontend.txt || true
 
-                        trivy image ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
+                        trivy image ${IMAGE_FRONTEND}:${IMAGE_TAG} \
                             --severity CRITICAL,HIGH \
                             --format sarif \
                             --output trivy-frontend.sarif \
                             --exit-code 0 || true
 
-                        syft ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} \
+                        syft ${IMAGE_FRONTEND}:${IMAGE_TAG} \
                             -o spdx-json=sbom-frontend.spdx.json || true
                     """
                 }
@@ -524,14 +534,14 @@ pipeline {
                     // Sinh SLSA provenance JSON bằng Groovy (tránh escape $ trong shell heredoc)
                     script {
                         def prov = [
-                            builder: [id: 'https://jenkins/techshop-ci'],
-                            buildType: 'https://jenkins/techshop-ci',
+                            builder: [id: "https://jenkins/${params.PROJECT_NAME}-ci"],
+                            buildType: "https://jenkins/${params.PROJECT_NAME}-ci",
                             invocation: [
                                 configSource: [uri: 'git+https://github.com/vinh25042005/deploy-web.git', digest: [sha1: env.GIT_COMMIT_SHORT]]
                             ],
                             metadata: [buildStartedOn: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))],
                             materials: [
-                                [uri: 'git+https://github.com/vinh25042005/techshop-app.git', digest: [sha1: env.APP_COMMIT_FULL]]
+                                [uri: params.APP_REPO, digest: [sha1: env.APP_COMMIT_FULL]]
                             ]
                         ]
                         writeFile file: 'slsa-provenance.json', text: groovy.json.JsonOutput.toJson(prov)
@@ -571,25 +581,25 @@ pipeline {
                             if [ "${env.BUILD_BACKEND}" != "false" ]; then
                               echo ">>> Sign backend..."
                               cosign attach sbom --sbom sbom-backend.spdx.json \
-                                ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG} || true
+                                ${IMAGE_BACKEND}:${IMAGE_TAG} || true
                               cosign sign --yes --key cosign.key \
-                                ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                                ${IMAGE_BACKEND}:${IMAGE_TAG}
                               cosign attest --yes --key cosign.key \
                                 --type https://slsa.dev/provenance/v1 \
                                 --predicate slsa-provenance.json \
-                                ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                                ${IMAGE_BACKEND}:${IMAGE_TAG}
                             fi
 
                             if [ "${env.BUILD_FRONTEND}" != "false" ]; then
                               echo ">>> Sign frontend..."
                               cosign attach sbom --sbom sbom-frontend.spdx.json \
-                                ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG} || true
+                                ${IMAGE_FRONTEND}:${IMAGE_TAG} || true
                               cosign sign --yes --key cosign.key \
-                                ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                                ${IMAGE_FRONTEND}:${IMAGE_TAG}
                               cosign attest --yes --key cosign.key \
                                 --type https://slsa.dev/provenance/v1 \
                                 --predicate slsa-provenance.json \
-                                ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                                ${IMAGE_FRONTEND}:${IMAGE_TAG}
                             fi
 
                             # Dọn key private khỏi workspace sau khi dùng
@@ -629,13 +639,13 @@ pipeline {
                     sh """#!/bin/bash
                         set -e
                         if [ "${env.BUILD_BACKEND}" != "false" ]; then
-                          echo ">>> Verify backend: ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}"
-                          cosign verify --key cosign.pub ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                          echo ">>> Verify backend: ${IMAGE_BACKEND}:${IMAGE_TAG}"
+                          cosign verify --key cosign.pub ${IMAGE_BACKEND}:${IMAGE_TAG}
                           echo "  ✅ backend chữ ký hợp lệ"
                         fi
                         if [ "${env.BUILD_FRONTEND}" != "false" ]; then
-                          echo ">>> Verify frontend: ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}"
-                          cosign verify --key cosign.pub ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                          echo ">>> Verify frontend: ${IMAGE_FRONTEND}:${IMAGE_TAG}"
+                          cosign verify --key cosign.pub ${IMAGE_FRONTEND}:${IMAGE_TAG}
                           echo "  ✅ frontend chữ ký hợp lệ"
                         fi
                         rm -f cosign.pub
@@ -651,8 +661,8 @@ pipeline {
                 script {
                     def registry = REGISTRY_BASE
                     def fmt = '{{.CreatedAt}}|{{.ID}}'
-                    sh "docker images '${registry}/deploy-web-backend' --format '${fmt}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
-                    sh "docker images '${registry}/deploy-web-frontend' --format '${fmt}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
+                    sh "docker images '${IMAGE_BACKEND}' --format '${fmt}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
+                    sh "docker images '${IMAGE_FRONTEND}' --format '${fmt}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
                     sh "docker system prune -f --filter 'until=24h' 2>/dev/null || true"
                     echo '>>> Đã dọn image cũ (giữ 3 mới nhất)'
                 }
@@ -667,7 +677,7 @@ pipeline {
             steps {
                 script {
                     if (sh(script: 'command -v argocd >/dev/null 2>&1', returnStatus: true) == 0) {
-                        sh "argocd app sync techshop-${env.ACTIVE_ENV} --async || echo 'ArgoCD sync lỗi (bỏ qua — ArgoCD tự sync)'; true"
+                        sh "argocd app sync ${params.PROJECT_NAME}-${env.ACTIVE_ENV} --async || echo 'ArgoCD sync lỗi (bỏ qua — ArgoCD tự sync)'; true"
                         echo '>>> Đã trigger ArgoCD sync'
                     } else {
                         echo '>>> argocd CLI không có — ArgoCD tự sync qua webhook/poll (bình thường)'
@@ -697,13 +707,13 @@ pipeline {
                         def backendTag = ''
                         if (env.BUILD_BACKEND != 'false') {
                             def bTag = (params.MODE == 'release') ? (params.IMAGE_TAG_OVERRIDE_BACKEND ?: params.IMAGE_TAG_OVERRIDE) : effectiveTag
-                            if (bTag) backendTag = "${REGISTRY_BASE}/deploy-web-backend:${bTag}"
+                            if (bTag) backendTag = "${IMAGE_BACKEND}:${bTag}"
                         }
                         if (env.BUILD_FRONTEND != 'false') {
                             def fTag = (params.MODE == 'release') ? (params.IMAGE_TAG_OVERRIDE_FRONTEND ?: params.IMAGE_TAG_OVERRIDE) : effectiveTag
-                            if (fTag) frontendTag = "${REGISTRY_BASE}/deploy-web-frontend:${fTag}"
+                            if (fTag) frontendTag = "${IMAGE_FRONTEND}:${fTag}"
                         }
-                            def argocdFile = "helm/techshop/.argocd-source-techshop-${ACTIVE_ENV}.yaml"
+                            def argocdFile = "helm/${params.PROJECT_NAME}/.argocd-source-${params.PROJECT_NAME}-${ACTIVE_ENV}.yaml"
 
                             // ── Merge .argocd-source: chỉ cập nhật image được build, GIỮ NGUYÊN phần còn lại ──
                             // (không dùng new File() — bị Groovy sandbox chặn; dùng readFile/fileExists thay thế)
@@ -735,7 +745,7 @@ pipeline {
                             if (frontendTag) merged += ["  - name: images.frontend", "    value: ${frontendTag}", "    forcestring: true"]
                             writeFile file: argocdFile, text: merged.join('\n') + '\n'
                             sh """
-                                git config user.email "jenkins@techshop.local"
+                                git config user.email "jenkins@${params.PROJECT_NAME}.local"
                                 git config user.name "jenkins-ci"
                                 git add ${argocdFile}
                                 git diff --cached --quiet && echo "No changes to commit" || {
@@ -766,8 +776,8 @@ pipeline {
                         def registry = REGISTRY_BASE
                         def formatStr = '{{.CreatedAt}}|{{.ID}}'
                         sh "echo '>>> Cleaning old Docker images (keep newest 3)...'"
-                        sh "docker images '${registry}/deploy-web-backend' --format '${formatStr}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
-                        sh "docker images '${registry}/deploy-web-frontend' --format '${formatStr}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
+                        sh "docker images '${IMAGE_BACKEND}' --format '${formatStr}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
+                        sh "docker images '${IMAGE_FRONTEND}' --format '${formatStr}' | sort | head -n -3 | cut -d'|' -f2 | xargs -r docker rmi -f 2>/dev/null || true"
                         sh "docker system prune -f --filter 'until=24h' 2>/dev/null || true"
                         sh "echo '>>> Cleanup done'"
                     }
