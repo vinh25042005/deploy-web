@@ -6,7 +6,7 @@ pipeline {
         // Auto-trigger qua Generic Webhook Trigger: webhook techshop-app POST
         // vào /generic-webhook-trigger/invoke?token=techshop-ci-trigger.
         // Lọc chỉ chạy khi push vào branch main (biến $ref từ payload).
-        genericTrigger(
+        GenericTrigger(
             token: 'techshop-ci-trigger',
             regexpFilterExpression: 'refs/heads/main',
             regexpFilterText: '$ref'
