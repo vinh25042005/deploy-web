@@ -156,6 +156,8 @@
             --dry-run=client -o yaml | kubectl apply -f -
         done
         echo ">>> Đã tạo app k8s Secrets từ Vault (backend-env, postgres, grafana, cosign)"
+      args:
+        executable: /bin/bash   # BẮT BUỘC: set -o pipefail không có trong /bin/sh (dash)
       changed_when: false
 
     - name: Add repository credential to ArgoCD

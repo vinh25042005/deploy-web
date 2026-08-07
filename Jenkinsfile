@@ -20,7 +20,7 @@ pipeline {
         choice(name: 'MODE', choices: ['full', 'ci', 'release'],
                description: 'full: build+scan+sign+GitOps | ci: chỉ build+scan+sign (không commit) | release: GitOps trỏ 1 IMAGE_TAG_OVERRIDE CÓ SẴN (không build)')
         string(name: 'IMAGE_TAG_OVERRIDE', defaultValue: '', description: 'release mode: tag image đã có (VD: stg-45) để GitOps trỏ tới')
-        string(name: 'ENABLED_STAGES', defaultValue: '["fetch-secrets","cluster-secrets","sonar","build","scan","sign","cleanup","gitops"]',
+        string(name: 'ENABLED_STAGES', defaultValue: '["fetch-secrets","cluster-secrets","sonar","build","scan","sign","verify","cleanup","gitops"]',
                description: 'JSON array bật/tắt stage. Mặc định: all. Thêm "test" (unit test) hoặc "deploy" (ArgoCD sync) khi cần.')
     }
 
@@ -578,6 +578,44 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'app-source/cosign-public.pem', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ── Verify Image (cosign) — pre-deploy gate (shift-left) ──
+        //   Xác nhận image vừa ký khớp public key CHÍNH mà Kyverno sẽ dùng
+        //   (cosign-pub ← secret/cosign). Lệch key → fail SỚM ở CI, không đợi
+        //   Kyverno chặn lúc deploy. KHÔNG chạy pod — chỉ đọc registry.
+        stage('Verify Image (cosign)') {
+            when { expression { params.MODE != 'release' && !params.SKIP_BUILD && stageEnabled('verify') && (env.BUILD_BACKEND != 'false' || env.BUILD_FRONTEND != 'false') } }
+            steps {
+                dir('app-source') {
+                    // Chuẩn hóa public key PEM từ Vault (tránh lỗi "invalid pem block")
+                    script {
+                        def raw = env.COSIGN_PUBLIC_KEY.replace('\\n', '\n')
+                        def header = "-----BEGIN ${(raw =~ /-----BEGIN ([^-]+)-----/)[0][1]}-----"
+                        def footer = "-----END ${(raw =~ /-----END ([^-]+)-----/)[0][1]}-----"
+                        def body = raw
+                            .replaceAll(/-----BEGIN [^-]+-----/, '')
+                            .replaceAll(/-----END [^-]+-----/, '')
+                            .replaceAll(/\s+/, '')
+                        def wrapped = body.replaceAll(/(.{64})/, '$1\n')
+                        writeFile file: 'cosign.pub', text: "${header}\n${wrapped}\n${footer}\n"
+                    }
+                    sh """#!/bin/bash
+                        set -e
+                        if [ "${env.BUILD_BACKEND}" != "false" ]; then
+                          echo ">>> Verify backend: ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}"
+                          cosign verify --key cosign.pub ${REGISTRY_BASE}/deploy-web-backend:${IMAGE_TAG}
+                          echo "  ✅ backend chữ ký hợp lệ"
+                        fi
+                        if [ "${env.BUILD_FRONTEND}" != "false" ]; then
+                          echo ">>> Verify frontend: ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}"
+                          cosign verify --key cosign.pub ${REGISTRY_BASE}/deploy-web-frontend:${IMAGE_TAG}
+                          echo "  ✅ frontend chữ ký hợp lệ"
+                        fi
+                        rm -f cosign.pub
+                    """
                 }
             }
         }

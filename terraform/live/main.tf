@@ -381,15 +381,13 @@ resource "terraform_data" "apply_kyverno_policies" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo ">>> Waiting for Kyverno webhook ready..."
-      for i in $(seq 1 30); do
-        if kubectl get pod -n kyverno -l app.kubernetes.io/name=kyverno \
-          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q True; then
-          echo "  Kyverno Ready sau $${i}0s"
-          break
-        fi
-        sleep 10
-      done
+      echo ">>> Waiting for Kyverno webhook ready (admission-controller)..."
+      # Dùng kubectl wait (thay vì loop + label sai). Label Kyverno là
+      # app.kubernetes.io/instance=kyverno, KHÔNG phải app.kubernetes.io/name=kyverno
+      # (trước đây query trả 0 pod → loop chờ đủ 5 phút dù đã ready).
+      kubectl wait --for=condition=available --timeout=300s \
+        deployment/kyverno-admission-controller -n kyverno || exit 1
+      echo "  ✅ Kyverno Ready"
       echo ">>> Applying Kyverno policies..."
       kubectl apply -f ${path.module}/../../kyverno/ || exit 1
 
