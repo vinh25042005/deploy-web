@@ -40,7 +40,7 @@ pipeline {
     }
 
     environment {
-        REGISTRY_BASE = params.REGISTRY_BASE
+        REGISTRY_BASE = "${params.REGISTRY_BASE}"
         // Tên image đầy đủ — <REGISTRY_BASE>/<IMAGE_REPO_PREFIX>-backend / -frontend
         IMAGE_BACKEND  = "${params.REGISTRY_BASE}/${params.IMAGE_REPO_PREFIX}-backend"
         IMAGE_FRONTEND = "${params.REGISTRY_BASE}/${params.IMAGE_REPO_PREFIX}-frontend"
@@ -62,7 +62,7 @@ pipeline {
         DB_PASSWORD = vault path: params.VAULT_DB_PATH, key: 'password'
 
         // ACTIVE_ENV / IMAGE_TAG / APP_BRANCH được tính trong stage "Resolve ENV"
-        APP_REPO = params.APP_REPO
+        APP_REPO = "${params.APP_REPO}"
     }
 
     stages {
