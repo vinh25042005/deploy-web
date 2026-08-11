@@ -1,0 +1,5 @@
+helm:
+  parameters:
+  - name: images.frontend
+    value: docker.io/vinh2504/deploy-web-frontend:dev-4
+    forcestring: true
