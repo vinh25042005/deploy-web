@@ -189,18 +189,35 @@ pipeline {
             }
         }
         // ── Fetch Kubeconfig (SSM) — cluster destroy/apply nhiều lần, IP đổi ──
-        //   Mỗi lần chạy pipeline: lấy kubeconfig MỚI NHẤT từ SSM /k8s/kubeconfig
-        //   (base64+gzip) → ghi ~/.kube/config → kubectl luôn trỏ đúng API server
-        //   hiện tại. Agent dùng IAM instance role (techshop-jenkins-role), không
-        //   hardcode key. Fail sớm nếu không đọc được hoặc không kết nối được cluster.
+        //   Mỗi lần chạy pipeline: lấy kubeconfig MỚI NHẤT từ SSM (base64+gzip) →
+        //   ghi ~/.kube/config → kubectl luôn trỏ đúng API server hiện tại.
+        //   Ưu tiên path PER-PROJECT: /k8s/<PROJECT>-<ENV>/kubeconfig (terraform
+        //   mới ghi per-project). Fallback global /k8s/kubeconfig (cluster cũ).
+        //   Agent dùng IAM instance role (techshop-jenkins-role), không hardcode key.
         stage('Fetch Kubeconfig (SSM)') {
             steps {
+                script {
+                    env.SSM_KUBECONFIG_PATH = sh(
+                        script: '''
+                            set -e
+                            PER_PROJECT="/k8s/${PROJECT_NAME}-${ENV}/kubeconfig"
+                            GLOBAL="/k8s/kubeconfig"
+                            if aws ssm get-parameter --name "$PER_PROJECT" --with-decryption --query Parameter.Value --output text >/dev/null 2>&1; then
+                                echo "$PER_PROJECT"
+                            else
+                                echo "$GLOBAL"
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                }
                 sh """
                     set -e
-                    aws ssm get-parameter --name /k8s/kubeconfig --with-decryption \\
+                    echo ">>> SSM kubeconfig: ${env.SSM_KUBECONFIG_PATH}"
+                    aws ssm get-parameter --name "${env.SSM_KUBECONFIG_PATH}" --with-decryption \\
                       --query 'Parameter.Value' --output text | base64 -d | gunzip > ~/.kube/config
                     chmod 600 ~/.kube/config
-                    kubectl get ns >/dev/null 2>&1 && echo '>>> Kubeconfig OK (từ SSM)' || { echo 'ERROR: kubectl không kết nối được cluster — kiểm tra SSM /k8s/kubeconfig'; exit 1; }
+                    kubectl get ns >/dev/null 2>&1 && echo '>>> Kubeconfig OK (từ SSM)' || { echo 'ERROR: kubectl không kết nối được cluster — kiểm tra SSM kubeconfig'; exit 1; }
                 """
             }
         }
