@@ -35,9 +35,9 @@
 - name: Run kubeadm init
   shell: |
     kubeadm init \
-      --control-plane-endpoint={{ master_private_ip }}:6443 \
+      --control-plane-endpoint={{ k8s_lb_endpoint | default(master_private_ip) }}:6443 \
       --apiserver-advertise-address={{ master_private_ip }} \
-      --apiserver-cert-extra-sans={{ master_public_ip }} \
+      --apiserver-cert-extra-sans={{ master_public_ip }},{{ k8s_lb_endpoint | default(master_private_ip) }} \
       --pod-network-cidr={{ pod_cidr | default('10.244.0.0/16') }} \
       --upload-certs \
       --kubernetes-version=v{{ k8s_version }}.0 2>&1 | tee /tmp/kubeadm-init.log

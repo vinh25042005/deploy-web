@@ -1,0 +1,25 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-ha-deployments
+  annotations:
+    policies.kyverno.io/title: Require High Availability Deployments
+    policies.kyverno.io/subject: Deployment, Rollout
+    policies.kyverno.io/description: >-
+      Ensures that all workloads in production namespaces have at least 2 replicas
+      for High Availability.
+spec:
+  validationFailureAction: Audit
+  rules:
+    - name: require-min-replicas
+      match:
+        any:
+        - resources:
+            kinds:
+              - Deployment
+              - Rollout
+      validate:
+        message: "Workloads must have at least 2 replicas for HA."
+        pattern:
+          spec:
+            replicas: ">1"

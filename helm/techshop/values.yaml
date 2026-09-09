@@ -27,7 +27,7 @@ frontend:
     limits: { cpu: 500m, memory: 256Mi }
 
 postgres:
-  enabled: true        # Postgres in-cluster với backup S3
+  enabled: false       # Đã thay bằng postgresql-ha ở dưới
   replicas: 1
   port: 5432
   user: postgres
@@ -189,3 +189,17 @@ monitoring:
   extraEnv:
     - name: AWS_REGION
       value: ap-southeast-1
+
+# ─── PostgreSQL HA (Bitnami + Pgpool-II) — thay thế postgres standalone ───
+postgresql-ha:
+  enabled: true
+  postgresql:
+    replicaCount: 3
+    password: "change_me"
+  pgpool:
+    replicaCount: 2
+    adminPassword: "change_me"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: "techshop-ssm-waitforfirstconsumer"

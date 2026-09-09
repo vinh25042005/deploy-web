@@ -21,3 +21,7 @@ dependencies:
     version: "~3.12"
     repository: "https://kubernetes-sigs.github.io/metrics-server"
     condition: hpa.enabled
+  - name: postgresql-ha
+    version: "~14.5.3"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql-ha.enabled

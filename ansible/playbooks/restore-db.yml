@@ -1,0 +1,32 @@
+---
+# ==========================================
+# Playbook: Automated Database Restore (DR)
+# ==========================================
+- hosts: masters
+  become: yes
+  tasks:
+    - name: Ensure AWS CLI and PostgreSQL client are installed
+      apt:
+        name:
+          - awscli
+          - postgresql-client
+        state: present
+        update_cache: yes
+
+    - name: Fetch latest backup from S3
+      shell: |
+        LATEST_BACKUP=$(aws s3 ls s3://{{ backup_bucket | default('techshop-loki-790400775134') }}/ | sort | tail -n 1 | awk '{print $4}')
+        aws s3 cp s3://{{ backup_bucket | default('techshop-loki-790400775134') }}/$LATEST_BACKUP /tmp/latest_backup.sql.gz
+        gzip -d -f /tmp/latest_backup.sql.gz
+      register: s3_fetch
+
+    - name: Restore database to new HA cluster
+      shell: |
+        PGPASSWORD={{ pg_password | default('change_me') }} psql -h {{ pg_host | default('techshop-postgresql-ha-pgpool.techshop.svc.cluster.local') }} -U {{ pg_user | default('postgres') }} -d {{ pg_db | default('shopdb') }} -f /tmp/latest_backup.sql
+      environment:
+        PGPASSWORD: "{{ pg_password | default('change_me') }}"
+
+    - name: Cleanup temporary files
+      file:
+        path: /tmp/latest_backup.sql
+        state: absent
